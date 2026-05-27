@@ -284,3 +284,117 @@ export const TriggerScraperResponse = zod.object({
 })
 
 
+/**
+ * @summary Get Telegram authentication and monitor status
+ */
+export const GetTelegramAuthStatusResponse = zod.object({
+  "configured": zod.boolean(),
+  "connected": zod.boolean(),
+  "authorized": zod.boolean(),
+  "phone": zod.string().nullish(),
+  "monitoring": zod.boolean(),
+  "channels_active": zod.number(),
+  "messages_processed": zod.number(),
+  "last_message_at": zod.coerce.date().nullish(),
+  "error": zod.string().nullish()
+})
+
+
+/**
+ * @summary Send Telegram login code to phone
+ */
+export const TelegramRequestCodeBody = zod.object({
+  "phone": zod.string()
+})
+
+export const TelegramRequestCodeResponse = zod.object({
+  "message": zod.string(),
+  "phone": zod.string()
+})
+
+
+/**
+ * @summary Verify Telegram login code (and optional 2FA password)
+ */
+export const TelegramVerifyCodeBody = zod.object({
+  "phone": zod.string(),
+  "code": zod.string(),
+  "password": zod.string().nullish()
+})
+
+export const TelegramVerifyCodeResponse = zod.object({
+  "message": zod.string(),
+  "authorized": zod.boolean()
+})
+
+
+/**
+ * @summary Log out from Telegram
+ */
+export const TelegramLogoutResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary List monitored Telegram channels
+ */
+export const ListTelegramChannelsResponseItem = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "title": zod.string().nullish(),
+  "channel_id": zod.number().nullish(),
+  "is_active": zod.boolean(),
+  "last_message_id": zod.number(),
+  "messages_processed": zod.number(),
+  "created_at": zod.coerce.date(),
+  "last_activity_at": zod.coerce.date().nullish()
+})
+export const ListTelegramChannelsResponse = zod.array(ListTelegramChannelsResponseItem)
+
+
+/**
+ * @summary Add a Telegram channel to monitor
+ */
+export const addTelegramChannelBodyIsActiveDefault = true;
+
+export const AddTelegramChannelBody = zod.object({
+  "username": zod.string(),
+  "title": zod.string().optional(),
+  "is_active": zod.boolean().default(addTelegramChannelBodyIsActiveDefault)
+})
+
+
+/**
+ * @summary Update a Telegram channel (toggle active, rename)
+ */
+export const UpdateTelegramChannelParams = zod.object({
+  "channelId": zod.coerce.number()
+})
+
+export const UpdateTelegramChannelBody = zod.object({
+  "title": zod.string().optional(),
+  "is_active": zod.boolean().optional()
+})
+
+export const UpdateTelegramChannelResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "title": zod.string().nullish(),
+  "channel_id": zod.number().nullish(),
+  "is_active": zod.boolean(),
+  "last_message_id": zod.number(),
+  "messages_processed": zod.number(),
+  "created_at": zod.coerce.date(),
+  "last_activity_at": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Remove a Telegram channel
+ */
+export const DeleteTelegramChannelParams = zod.object({
+  "channelId": zod.coerce.number()
+})
+
+

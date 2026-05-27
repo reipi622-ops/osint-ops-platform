@@ -1,6 +1,9 @@
+import asyncio
+import json
 import math
 import logging
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import Optional
@@ -8,6 +11,7 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app import models, schemas
 from app.services.deduplicator import compute_hash
+from app.services.event_broadcaster import broadcaster
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/events", tags=["events"])
@@ -62,6 +66,37 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         by_category=by_category,
         by_source=by_source,
         recent_timeline=timeline,
+    )
+
+
+@router.get("/stream")
+async def events_stream(request: Request):
+    """
+    Server-Sent Events stream. Clients receive a 'new_event' message for every
+    event processed by Telegram monitor or RSS scraper, plus a heartbeat every
+    20 s to keep the connection alive through proxies.
+    """
+    q = broadcaster.subscribe()
+
+    async def generate():
+        try:
+            yield "event: connected\ndata: {}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=20.0)
+                    data = json.dumps(payload, default=str)
+                    yield f"event: new_event\ndata: {data}\n\n"
+                except asyncio.TimeoutError:
+                    yield "event: heartbeat\ndata: {}\n\n"
+        finally:
+            broadcaster.unsubscribe(q)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -140,6 +175,13 @@ async def create_event(event: schemas.EventInput, db: Session = Depends(get_db))
     db.add(db_event)
     db.commit()
     db.refresh(db_event)
+
+    # Broadcast new manually-created events too
+    from app.schemas import EventResponse
+    from pydantic import TypeAdapter
+    payload = TypeAdapter(EventResponse).validate_python(db_event).model_dump(mode="json")
+    await broadcaster.broadcast(payload)
+
     return db_event
 
 

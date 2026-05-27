@@ -126,3 +126,51 @@ class HealthStatus(BaseModel):
     status: str
     version: str = "1.0.0"
     database: str = "connected"
+
+
+# ── Telegram ──────────────────────────────────────────────────────────────────
+
+class TelegramChannelInput(BaseModel):
+    username: str
+    title: Optional[str] = None
+    is_active: bool = True
+
+
+class TelegramChannelUpdate(BaseModel):
+    title: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class TelegramChannelResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    title: Optional[str] = None
+    channel_id: Optional[int] = None
+    is_active: bool
+    last_message_id: int
+    messages_processed: int
+    created_at: datetime
+    last_activity_at: Optional[datetime] = None
+
+
+class TelegramAuthStatus(BaseModel):
+    configured: bool
+    connected: bool
+    authorized: bool
+    phone: Optional[str] = None
+    monitoring: bool
+    channels_active: int
+    messages_processed: int
+    last_message_at: Optional[datetime] = None
+    error: Optional[str] = None
+
+
+class TelegramCodeRequest(BaseModel):
+    phone: str
+
+
+class TelegramVerifyRequest(BaseModel):
+    phone: str
+    code: str
+    password: Optional[str] = None

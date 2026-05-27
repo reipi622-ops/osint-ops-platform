@@ -1,5 +1,5 @@
 import { Layout } from "@/components/layout";
-import { useListSources, useGetScraperStatus, useTriggerScraper } from "@workspace/api-client-react";
+import { useListSources, useGetScraperStatus, useTriggerScraper, getGetScraperStatusQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function SourcesList() {
   const { data: sources, isLoading } = useListSources();
-  const { data: status } = useGetScraperStatus({ query: { refetchInterval: 3000 } });
+  const { data: status } = useGetScraperStatus({ query: { queryKey: getGetScraperStatusQueryKey(), refetchInterval: 3000 } });
   const triggerScraper = useTriggerScraper();
   const { toast } = useToast();
 

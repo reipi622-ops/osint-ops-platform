@@ -30,7 +30,16 @@ import type {
   ScraperStatus,
   SourceInput,
   SourceResponse,
-  SourceUpdate
+  SourceUpdate,
+  TelegramAuthStatus,
+  TelegramChannelInput,
+  TelegramChannelResponse,
+  TelegramChannelUpdate,
+  TelegramCodeRequest,
+  TelegramLogout200,
+  TelegramRequestCode200,
+  TelegramVerifyCode200,
+  TelegramVerifyRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1009,5 +1018,584 @@ export const useTriggerScraper = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getTriggerScraperMutationOptions(options));
+    }
+
+export const getGetTelegramAuthStatusUrl = () => {
+
+
+
+
+  return `/api/telegram/auth/status`
+}
+
+/**
+ * @summary Get Telegram authentication and monitor status
+ */
+export const getTelegramAuthStatus = async ( options?: RequestInit): Promise<TelegramAuthStatus> => {
+
+  return customFetch<TelegramAuthStatus>(getGetTelegramAuthStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTelegramAuthStatusQueryKey = () => {
+    return [
+    `/api/telegram/auth/status`
+    ] as const;
+    }
+
+
+export const getGetTelegramAuthStatusQueryOptions = <TData = Awaited<ReturnType<typeof getTelegramAuthStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTelegramAuthStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTelegramAuthStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTelegramAuthStatus>>> = ({ signal }) => getTelegramAuthStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTelegramAuthStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTelegramAuthStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getTelegramAuthStatus>>>
+export type GetTelegramAuthStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get Telegram authentication and monitor status
+ */
+
+export function useGetTelegramAuthStatus<TData = Awaited<ReturnType<typeof getTelegramAuthStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTelegramAuthStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTelegramAuthStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getTelegramRequestCodeUrl = () => {
+
+
+
+
+  return `/api/telegram/auth/request-code`
+}
+
+/**
+ * @summary Send Telegram login code to phone
+ */
+export const telegramRequestCode = async (telegramCodeRequest: TelegramCodeRequest, options?: RequestInit): Promise<TelegramRequestCode200> => {
+
+  return customFetch<TelegramRequestCode200>(getTelegramRequestCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      telegramCodeRequest,)
+  }
+);}
+
+
+
+
+export const getTelegramRequestCodeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof telegramRequestCode>>, TError,{data: BodyType<TelegramCodeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof telegramRequestCode>>, TError,{data: BodyType<TelegramCodeRequest>}, TContext> => {
+
+const mutationKey = ['telegramRequestCode'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof telegramRequestCode>>, {data: BodyType<TelegramCodeRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  telegramRequestCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TelegramRequestCodeMutationResult = NonNullable<Awaited<ReturnType<typeof telegramRequestCode>>>
+    export type TelegramRequestCodeMutationBody = BodyType<TelegramCodeRequest>
+    export type TelegramRequestCodeMutationError = ErrorType<void>
+
+    /**
+ * @summary Send Telegram login code to phone
+ */
+export const useTelegramRequestCode = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof telegramRequestCode>>, TError,{data: BodyType<TelegramCodeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof telegramRequestCode>>,
+        TError,
+        {data: BodyType<TelegramCodeRequest>},
+        TContext
+      > => {
+      return useMutation(getTelegramRequestCodeMutationOptions(options));
+    }
+
+export const getTelegramVerifyCodeUrl = () => {
+
+
+
+
+  return `/api/telegram/auth/verify-code`
+}
+
+/**
+ * @summary Verify Telegram login code (and optional 2FA password)
+ */
+export const telegramVerifyCode = async (telegramVerifyRequest: TelegramVerifyRequest, options?: RequestInit): Promise<TelegramVerifyCode200> => {
+
+  return customFetch<TelegramVerifyCode200>(getTelegramVerifyCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      telegramVerifyRequest,)
+  }
+);}
+
+
+
+
+export const getTelegramVerifyCodeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof telegramVerifyCode>>, TError,{data: BodyType<TelegramVerifyRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof telegramVerifyCode>>, TError,{data: BodyType<TelegramVerifyRequest>}, TContext> => {
+
+const mutationKey = ['telegramVerifyCode'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof telegramVerifyCode>>, {data: BodyType<TelegramVerifyRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  telegramVerifyCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TelegramVerifyCodeMutationResult = NonNullable<Awaited<ReturnType<typeof telegramVerifyCode>>>
+    export type TelegramVerifyCodeMutationBody = BodyType<TelegramVerifyRequest>
+    export type TelegramVerifyCodeMutationError = ErrorType<void>
+
+    /**
+ * @summary Verify Telegram login code (and optional 2FA password)
+ */
+export const useTelegramVerifyCode = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof telegramVerifyCode>>, TError,{data: BodyType<TelegramVerifyRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof telegramVerifyCode>>,
+        TError,
+        {data: BodyType<TelegramVerifyRequest>},
+        TContext
+      > => {
+      return useMutation(getTelegramVerifyCodeMutationOptions(options));
+    }
+
+export const getTelegramLogoutUrl = () => {
+
+
+
+
+  return `/api/telegram/auth/logout`
+}
+
+/**
+ * @summary Log out from Telegram
+ */
+export const telegramLogout = async ( options?: RequestInit): Promise<TelegramLogout200> => {
+
+  return customFetch<TelegramLogout200>(getTelegramLogoutUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTelegramLogoutMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof telegramLogout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof telegramLogout>>, TError,void, TContext> => {
+
+const mutationKey = ['telegramLogout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof telegramLogout>>, void> = () => {
+
+
+          return  telegramLogout(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TelegramLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof telegramLogout>>>
+
+    export type TelegramLogoutMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Log out from Telegram
+ */
+export const useTelegramLogout = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof telegramLogout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof telegramLogout>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTelegramLogoutMutationOptions(options));
+    }
+
+export const getListTelegramChannelsUrl = () => {
+
+
+
+
+  return `/api/telegram/channels`
+}
+
+/**
+ * @summary List monitored Telegram channels
+ */
+export const listTelegramChannels = async ( options?: RequestInit): Promise<TelegramChannelResponse[]> => {
+
+  return customFetch<TelegramChannelResponse[]>(getListTelegramChannelsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTelegramChannelsQueryKey = () => {
+    return [
+    `/api/telegram/channels`
+    ] as const;
+    }
+
+
+export const getListTelegramChannelsQueryOptions = <TData = Awaited<ReturnType<typeof listTelegramChannels>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTelegramChannels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTelegramChannelsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTelegramChannels>>> = ({ signal }) => listTelegramChannels({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTelegramChannels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTelegramChannelsQueryResult = NonNullable<Awaited<ReturnType<typeof listTelegramChannels>>>
+export type ListTelegramChannelsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List monitored Telegram channels
+ */
+
+export function useListTelegramChannels<TData = Awaited<ReturnType<typeof listTelegramChannels>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTelegramChannels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTelegramChannelsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAddTelegramChannelUrl = () => {
+
+
+
+
+  return `/api/telegram/channels`
+}
+
+/**
+ * @summary Add a Telegram channel to monitor
+ */
+export const addTelegramChannel = async (telegramChannelInput: TelegramChannelInput, options?: RequestInit): Promise<TelegramChannelResponse> => {
+
+  return customFetch<TelegramChannelResponse>(getAddTelegramChannelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      telegramChannelInput,)
+  }
+);}
+
+
+
+
+export const getAddTelegramChannelMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addTelegramChannel>>, TError,{data: BodyType<TelegramChannelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addTelegramChannel>>, TError,{data: BodyType<TelegramChannelInput>}, TContext> => {
+
+const mutationKey = ['addTelegramChannel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addTelegramChannel>>, {data: BodyType<TelegramChannelInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  addTelegramChannel(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddTelegramChannelMutationResult = NonNullable<Awaited<ReturnType<typeof addTelegramChannel>>>
+    export type AddTelegramChannelMutationBody = BodyType<TelegramChannelInput>
+    export type AddTelegramChannelMutationError = ErrorType<void>
+
+    /**
+ * @summary Add a Telegram channel to monitor
+ */
+export const useAddTelegramChannel = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addTelegramChannel>>, TError,{data: BodyType<TelegramChannelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addTelegramChannel>>,
+        TError,
+        {data: BodyType<TelegramChannelInput>},
+        TContext
+      > => {
+      return useMutation(getAddTelegramChannelMutationOptions(options));
+    }
+
+export const getUpdateTelegramChannelUrl = (channelId: number,) => {
+
+
+
+
+  return `/api/telegram/channels/${channelId}`
+}
+
+/**
+ * @summary Update a Telegram channel (toggle active, rename)
+ */
+export const updateTelegramChannel = async (channelId: number,
+    telegramChannelUpdate: TelegramChannelUpdate, options?: RequestInit): Promise<TelegramChannelResponse> => {
+
+  return customFetch<TelegramChannelResponse>(getUpdateTelegramChannelUrl(channelId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      telegramChannelUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateTelegramChannelMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTelegramChannel>>, TError,{channelId: number;data: BodyType<TelegramChannelUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateTelegramChannel>>, TError,{channelId: number;data: BodyType<TelegramChannelUpdate>}, TContext> => {
+
+const mutationKey = ['updateTelegramChannel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTelegramChannel>>, {channelId: number;data: BodyType<TelegramChannelUpdate>}> = (props) => {
+          const {channelId,data} = props ?? {};
+
+          return  updateTelegramChannel(channelId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateTelegramChannelMutationResult = NonNullable<Awaited<ReturnType<typeof updateTelegramChannel>>>
+    export type UpdateTelegramChannelMutationBody = BodyType<TelegramChannelUpdate>
+    export type UpdateTelegramChannelMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a Telegram channel (toggle active, rename)
+ */
+export const useUpdateTelegramChannel = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTelegramChannel>>, TError,{channelId: number;data: BodyType<TelegramChannelUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateTelegramChannel>>,
+        TError,
+        {channelId: number;data: BodyType<TelegramChannelUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateTelegramChannelMutationOptions(options));
+    }
+
+export const getDeleteTelegramChannelUrl = (channelId: number,) => {
+
+
+
+
+  return `/api/telegram/channels/${channelId}`
+}
+
+/**
+ * @summary Remove a Telegram channel
+ */
+export const deleteTelegramChannel = async (channelId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteTelegramChannelUrl(channelId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTelegramChannelMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTelegramChannel>>, TError,{channelId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTelegramChannel>>, TError,{channelId: number}, TContext> => {
+
+const mutationKey = ['deleteTelegramChannel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTelegramChannel>>, {channelId: number}> = (props) => {
+          const {channelId} = props ?? {};
+
+          return  deleteTelegramChannel(channelId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTelegramChannelMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTelegramChannel>>>
+
+    export type DeleteTelegramChannelMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove a Telegram channel
+ */
+export const useDeleteTelegramChannel = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTelegramChannel>>, TError,{channelId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTelegramChannel>>,
+        TError,
+        {channelId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteTelegramChannelMutationOptions(options));
     }
 

@@ -143,6 +143,58 @@ export interface ScraperStatus {
   sources_count: number;
 }
 
+export interface TelegramAuthStatus {
+  configured: boolean;
+  connected: boolean;
+  authorized: boolean;
+  /** @nullable */
+  phone?: string | null;
+  monitoring: boolean;
+  channels_active: number;
+  messages_processed: number;
+  /** @nullable */
+  last_message_at?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface TelegramCodeRequest {
+  phone: string;
+}
+
+export interface TelegramVerifyRequest {
+  phone: string;
+  code: string;
+  /** @nullable */
+  password?: string | null;
+}
+
+export interface TelegramChannelInput {
+  username: string;
+  title?: string;
+  is_active?: boolean;
+}
+
+export interface TelegramChannelUpdate {
+  title?: string;
+  is_active?: boolean;
+}
+
+export interface TelegramChannelResponse {
+  id: number;
+  username: string;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  channel_id?: number | null;
+  is_active: boolean;
+  last_message_id: number;
+  messages_processed: number;
+  created_at: string;
+  /** @nullable */
+  last_activity_at?: string | null;
+}
+
 export type ListEventsParams = {
 category?: string;
 source_id?: number;
@@ -154,5 +206,19 @@ lng?: number;
 radius_km?: number;
 limit?: number;
 offset?: number;
+};
+
+export type TelegramRequestCode200 = {
+  message: string;
+  phone: string;
+};
+
+export type TelegramVerifyCode200 = {
+  message: string;
+  authorized: boolean;
+};
+
+export type TelegramLogout200 = {
+  message: string;
 };
 

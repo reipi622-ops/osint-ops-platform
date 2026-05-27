@@ -47,3 +47,17 @@ class Event(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     source = relationship("Source", back_populates="events")
+
+
+class TelegramChannel(Base):
+    __tablename__ = "telegram_channels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False, unique=True)
+    title = Column(String, nullable=True)
+    channel_id = Column(Integer, nullable=True, index=True)
+    is_active = Column(Boolean, default=True)
+    last_message_id = Column(Integer, default=0)
+    messages_processed = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_activity_at = Column(DateTime, nullable=True)

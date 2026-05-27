@@ -16,6 +16,8 @@ tags:
     description: News source management
   - name: scraper
     description: Scraper control
+  - name: telegram
+    description: Telegram channel monitoring and authentication
 paths:
   /healthz:
     get:
@@ -253,6 +255,157 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScraperStatus"
 
+  /telegram/auth/status:
+    get:
+      operationId: getTelegramAuthStatus
+      tags: [telegram]
+      summary: Get Telegram authentication and monitor status
+      responses:
+        "200":
+          description: Telegram status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramAuthStatus"
+
+  /telegram/auth/request-code:
+    post:
+      operationId: telegramRequestCode
+      tags: [telegram]
+      summary: Send Telegram login code to phone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramCodeRequest"
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  phone: { type: string }
+                required: [message, phone]
+        "503":
+          description: Not configured
+
+  /telegram/auth/verify-code:
+    post:
+      operationId: telegramVerifyCode
+      tags: [telegram]
+      summary: Verify Telegram login code (and optional 2FA password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramVerifyRequest"
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  authorized: { type: boolean }
+                required: [message, authorized]
+        "400":
+          description: Invalid code
+
+  /telegram/auth/logout:
+    post:
+      operationId: telegramLogout
+      tags: [telegram]
+      summary: Log out from Telegram
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                required: [message]
+
+  /telegram/channels:
+    get:
+      operationId: listTelegramChannels
+      tags: [telegram]
+      summary: List monitored Telegram channels
+      responses:
+        "200":
+          description: Channel list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TelegramChannelResponse"
+    post:
+      operationId: addTelegramChannel
+      tags: [telegram]
+      summary: Add a Telegram channel to monitor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramChannelInput"
+      responses:
+        "201":
+          description: Channel added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramChannelResponse"
+        "409":
+          description: Channel already exists
+
+  /telegram/channels/{channelId}:
+    patch:
+      operationId: updateTelegramChannel
+      tags: [telegram]
+      summary: Update a Telegram channel (toggle active, rename)
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramChannelUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramChannelResponse"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteTelegramChannel
+      tags: [telegram]
+      summary: Remove a Telegram channel
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -417,3 +570,59 @@ components:
           items: { type: string }
         sources_count: { type: integer }
       required: [is_running, last_run_events, last_run_errors, sources_count]
+
+    TelegramAuthStatus:
+      type: object
+      properties:
+        configured: { type: boolean }
+        connected: { type: boolean }
+        authorized: { type: boolean }
+        phone: { type: ["string", "null"] }
+        monitoring: { type: boolean }
+        channels_active: { type: integer }
+        messages_processed: { type: integer }
+        last_message_at: { type: ["string", "null"], format: date-time }
+        error: { type: ["string", "null"] }
+      required: [configured, connected, authorized, monitoring, channels_active, messages_processed]
+
+    TelegramCodeRequest:
+      type: object
+      properties:
+        phone: { type: string }
+      required: [phone]
+
+    TelegramVerifyRequest:
+      type: object
+      properties:
+        phone: { type: string }
+        code: { type: string }
+        password: { type: ["string", "null"] }
+      required: [phone, code]
+
+    TelegramChannelInput:
+      type: object
+      properties:
+        username: { type: string }
+        title: { type: string }
+        is_active: { type: boolean, default: true }
+      required: [username]
+
+    TelegramChannelUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        is_active: { type: boolean }
+
+    TelegramChannelResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        title: { type: ["string", "null"] }
+        channel_id: { type: ["integer", "null"] }
+        is_active: { type: boolean }
+        last_message_id: { type: integer }
+        messages_processed: { type: integer }
+        created_at: { type: string, format: date-time }
+        last_activity_at: { type: ["string", "null"], format: date-time }
+      required: [id, username, is_active, last_message_id, messages_processed, created_at]

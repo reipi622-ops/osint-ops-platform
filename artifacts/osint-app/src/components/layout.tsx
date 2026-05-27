@@ -1,15 +1,26 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Map, LayoutDashboard, List, Rss } from "lucide-react";
+import { Map, LayoutDashboard, List, Rss, MessageSquare } from "lucide-react";
+import { useGetTelegramAuthStatus, getGetTelegramAuthStatusQueryKey } from "@workspace/api-client-react";
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const { data: telegramStatus } = useGetTelegramAuthStatus({ 
+    query: { queryKey: getGetTelegramAuthStatusQueryKey(), refetchInterval: 10000 } 
+  });
+
+  const getTelegramStatusDot = () => {
+    if (telegramStatus?.authorized) return "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]";
+    if (telegramStatus?.configured) return "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]";
+    return "bg-slate-500";
+  };
 
   const navItems = [
     { href: "/", label: "Live Map", icon: Map },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/events", label: "Events", icon: List },
     { href: "/sources", label: "Sources", icon: Rss },
+    { href: "/telegram", label: "Telegram", icon: MessageSquare, badge: getTelegramStatusDot() },
   ];
 
   return (
@@ -38,7 +49,10 @@ export function Layout({ children }: { children: ReactNode }) {
                   }`}
                 >
                   <Icon className="w-4 h-4" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && (
+                    <span className={`w-2 h-2 rounded-full ${item.badge}`} />
+                  )}
                 </div>
               </Link>
             );

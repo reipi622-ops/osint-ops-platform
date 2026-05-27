@@ -1,5 +1,5 @@
 import { Layout } from "@/components/layout";
-import { useListEvents, useGetEvent } from "@workspace/api-client-react";
+import { useListEvents, useGetEvent, getGetEventQueryKey } from "@workspace/api-client-react";
 import { useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import { CATEGORY_HEX_COLORS, CATEGORY_COLORS } from "@/lib/constants";
@@ -14,7 +14,7 @@ export default function MapView() {
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
 
   const { data: selectedEvent } = useGetEvent(selectedEventId!, {
-    query: { enabled: !!selectedEventId }
+    query: { queryKey: getGetEventQueryKey(selectedEventId!), enabled: !!selectedEventId }
   });
 
   return (
