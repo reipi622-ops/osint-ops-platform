@@ -1,0 +1,1 @@
+- [Python on Nix](python-nix.md) — pip needs `--break-system-packages` in Nix; use `python3 -m pip` and `python3 -m uvicorn`, pre-install before workflow start

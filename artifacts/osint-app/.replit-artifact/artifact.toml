@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "OSINT Platform"
+version = "1.0.0"
+id = "artifacts/osint-app"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20357
+
+[services.development]
+run = "pnpm --filter @workspace/osint-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/osint-app", "run", "build" ]
+publicDir = "artifacts/osint-app/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20357"
+BASE_PATH = "/"

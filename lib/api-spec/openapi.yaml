@@ -2,14 +2,20 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: OSINT Platform API - collects and analyzes events from Arabic news sources
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: events
+    description: OSINT event management
+  - name: sources
+    description: News source management
+  - name: scraper
+    description: Scraper control
 paths:
   /healthz:
     get:
@@ -24,13 +30,390 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /events:
+    get:
+      operationId: listEvents
+      tags: [events]
+      summary: List events with filters
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: source_id
+          in: query
+          schema: { type: integer }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: lat
+          in: query
+          schema: { type: number }
+        - name: lng
+          in: query
+          schema: { type: number }
+        - name: radius_km
+          in: query
+          schema: { type: number }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: List of events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventListResponse"
+    post:
+      operationId: createEvent
+      tags: [events]
+      summary: Create a new event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventInput"
+      responses:
+        "201":
+          description: Created event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventResponse"
+
+  /events/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [events]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /events/{eventId}:
+    get:
+      operationId: getEvent
+      tags: [events]
+      summary: Get event by ID
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventResponse"
+        "404":
+          description: Not found
+    put:
+      operationId: updateEvent
+      tags: [events]
+      summary: Update event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventUpdate"
+      responses:
+        "200":
+          description: Updated event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventResponse"
+    delete:
+      operationId: deleteEvent
+      tags: [events]
+      summary: Delete event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
+  /sources:
+    get:
+      operationId: listSources
+      tags: [sources]
+      summary: List all sources
+      responses:
+        "200":
+          description: List of sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SourceResponse"
+    post:
+      operationId: createSource
+      tags: [sources]
+      summary: Add a new source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourceInput"
+      responses:
+        "201":
+          description: Created source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceResponse"
+
+  /sources/{sourceId}:
+    put:
+      operationId: updateSource
+      tags: [sources]
+      summary: Update source
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourceUpdate"
+      responses:
+        "200":
+          description: Updated source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceResponse"
+    delete:
+      operationId: deleteSource
+      tags: [sources]
+      summary: Delete source
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
+  /scraper/status:
+    get:
+      operationId: getScraperStatus
+      tags: [scraper]
+      summary: Get scraper status
+      responses:
+        "200":
+          description: Scraper status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScraperStatus"
+
+  /scraper/trigger:
+    post:
+      operationId: triggerScraper
+      tags: [scraper]
+      summary: Trigger scraper run
+      responses:
+        "200":
+          description: Scraper triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScraperStatus"
+
 components:
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
+        version: { type: string }
+        database: { type: string }
+      required: [status]
 
+    EventResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        title_he: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        description_he: { type: ["string", "null"] }
+        category: { type: string }
+        confidence: { type: number }
+        source_id: { type: ["integer", "null"] }
+        source_name: { type: ["string", "null"] }
+        source_url: { type: ["string", "null"] }
+        location_name: { type: ["string", "null"] }
+        lat: { type: ["number", "null"] }
+        lng: { type: ["number", "null"] }
+        original_lang: { type: string }
+        raw_text: { type: ["string", "null"] }
+        event_hash: { type: string }
+        is_duplicate: { type: boolean }
+        scraped_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        event_date: { type: ["string", "null"], format: date-time }
+      required: [id, title, category, confidence, original_lang, event_hash, is_duplicate, scraped_at, created_at]
+
+    EventInput:
+      type: object
+      properties:
+        title: { type: string }
+        title_he: { type: string }
+        description: { type: string }
+        description_he: { type: string }
+        category: { type: string, default: other }
+        confidence: { type: number, default: 0.5 }
+        source_id: { type: integer }
+        source_name: { type: string }
+        source_url: { type: string }
+        location_name: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        original_lang: { type: string, default: ar }
+        raw_text: { type: string }
+        event_date: { type: string, format: date-time }
+      required: [title]
+
+    EventUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        title_he: { type: string }
+        description: { type: string }
+        description_he: { type: string }
+        category: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        location_name: { type: string }
+
+    EventListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventResponse"
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+      required: [items, total, offset, limit]
+
+    SourceResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        url: { type: string }
+        is_active: { type: boolean }
+        last_scraped_at: { type: ["string", "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        events_count: { type: integer }
+      required: [id, name, type, url, is_active, created_at, events_count]
+
+    SourceInput:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        url: { type: string }
+        is_active: { type: boolean, default: true }
+      required: [name, type, url]
+
+    SourceUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        url: { type: string }
+        is_active: { type: boolean }
+
+    CategoryCount:
+      type: object
+      properties:
+        category: { type: string }
+        count: { type: integer }
+      required: [category, count]
+
+    SourceCount:
+      type: object
+      properties:
+        source_name: { type: string }
+        count: { type: integer }
+      required: [source_name, count]
+
+    DailyCount:
+      type: object
+      properties:
+        date: { type: string }
+        count: { type: integer }
+        categories:
+          type: object
+          additionalProperties: { type: integer }
+      required: [date, count, categories]
+
+    DashboardStats:
+      type: object
+      properties:
+        total_events: { type: integer }
+        events_today: { type: integer }
+        events_this_week: { type: integer }
+        by_category:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+        by_source:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceCount"
+        recent_timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyCount"
+      required: [total_events, events_today, events_this_week, by_category, by_source, recent_timeline]
+
+    ScraperStatus:
+      type: object
+      properties:
+        is_running: { type: boolean }
+        last_run_at: { type: ["string", "null"], format: date-time }
+        last_run_events: { type: integer }
+        last_run_errors:
+          type: array
+          items: { type: string }
+        sources_count: { type: integer }
+      required: [is_running, last_run_events, last_run_errors, sources_count]
