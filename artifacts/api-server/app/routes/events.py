@@ -286,17 +286,23 @@ async def export_events(
     side: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     is_important: Optional[bool] = Query(None),
+    source_name: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=200),
+    confidence_level: Optional[str] = Query(None),
+    hide_propaganda: Optional[bool] = Query(None),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     limit: int = Query(1000, le=5000),
     db: Session = Depends(get_db),
 ):
-    """Export events as JSON or CSV. Up to 5000 rows."""
+    """Export events as JSON or CSV. Applies the same filter set as GET /events. Up to 5000 rows."""
     import csv
     import io
 
     if side and side not in _VALID_SIDES:
         raise HTTPException(400, f"Invalid side. Must be one of: {', '.join(_VALID_SIDES)}")
+    if confidence_level and confidence_level not in _VALID_LEVELS:
+        raise HTTPException(400, f"Invalid confidence_level. Must be one of: {', '.join(_VALID_LEVELS)}")
 
     query = db.query(models.Event).filter(models.Event.is_duplicate == False)
     if side:
@@ -305,10 +311,28 @@ async def export_events(
         query = query.filter(models.Event.category == category)
     if is_important is True:
         query = query.filter(models.Event.is_important == True)
+    if source_name:
+        query = query.filter(models.Event.source_name.ilike(f"%{source_name[:100]}%"))
+    if confidence_level:
+        query = query.filter(models.Event.confidence_level == confidence_level)
+    if hide_propaganda is True:
+        query = query.filter(
+            or_(models.Event.propaganda_score.is_(None), models.Event.propaganda_score < 0.50)
+        )
     if date_from:
         query = query.filter(models.Event.created_at >= date_from)
     if date_to:
         query = query.filter(models.Event.created_at <= date_to)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                models.Event.title.ilike(term),
+                models.Event.title_he.ilike(term),
+                models.Event.description_he.ilike(term),
+                models.Event.location_name.ilike(term),
+            )
+        )
 
     items = query.order_by(models.Event.created_at.desc()).limit(limit).all()
 
