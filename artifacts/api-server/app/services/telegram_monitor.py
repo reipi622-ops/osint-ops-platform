@@ -498,11 +498,11 @@ def _process_message_sync(
     channel_tg_id: Optional[int],
     message_id: int,
 ) -> None:
-    """Synchronous pipeline: translate → classify → geolocate → store → broadcast."""
+    """Synchronous pipeline: translate → classify → importance → geolocate → store → broadcast."""
     from app.database import SessionLocal
     from app import models
-    from app.services.classifier import classify_event, classify_side
-    from app.services.deduplicator import compute_hash
+    from app.services.classifier import classify_event, classify_side, detect_importance
+    from app.services.deduplicator import compute_hash, is_near_duplicate, register_event
     from app.services.geolocator import extract_location
     from app.services.translator import translate_text
     from app.services.event_broadcaster import broadcaster
@@ -511,7 +511,16 @@ def _process_message_sync(
     try:
         event_hash = compute_hash(text, "")
         if db.query(models.Event).filter(models.Event.event_hash == event_hash).first():
-            logger.debug("Telegram: skipping duplicate msg_id=%s from @%s", message_id, channel_username)
+            logger.debug("Telegram: skipping exact-duplicate msg_id=%s from @%s", message_id, channel_username)
+            return
+
+        # Near-duplicate check (same event from multiple channels, slightly different wording)
+        near_dup, near_dup_id = is_near_duplicate(text)
+        if near_dup:
+            logger.info(
+                "Telegram: near-duplicate detected msg_id=%s @%s — similar to event_id=%s, skipping",
+                message_id, channel_username, near_dup_id,
+            )
             return
 
         is_ar = _is_arabic(text)
@@ -521,6 +530,7 @@ def _process_message_sync(
 
         category, confidence = classify_event(text, "")
         side, _side_conf = classify_side(text, "")
+        is_important, importance_score, importance_tags = detect_importance(text, "")
         location_name, lat, lng = extract_location(text)
 
         source_url = f"https://t.me/{channel_username}"
@@ -544,6 +554,9 @@ def _process_message_sync(
             category=category,
             side=side,
             confidence=confidence,
+            is_important=is_important,
+            importance_score=importance_score,
+            importance_tags=importance_tags or None,
             source_id=source.id,
             source_name=source.name,
             source_url=source_url,
@@ -588,6 +601,15 @@ def _process_message_sync(
 
         _status["messages_processed"] += 1
         _status["last_message_at"] = now
+
+        # Register in near-dedup window so subsequent similar messages are dropped
+        register_event(text, ev.id)
+
+        if is_important:
+            logger.info(
+                "Telegram: ⚠ IMPORTANT event id=%d score=%.2f tags=[%s] @%s",
+                ev.id, importance_score, importance_tags, channel_username,
+            )
 
         # Broadcast to SSE clients — use the captured main loop for thread safety
         from pydantic import TypeAdapter

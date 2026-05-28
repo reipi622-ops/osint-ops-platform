@@ -53,6 +53,10 @@ export interface EventResponse {
   created_at: string;
   /** @nullable */
   event_date?: string | null;
+  is_important?: boolean;
+  importance_score?: number;
+  /** @nullable */
+  importance_tags?: string | null;
 }
 
 export interface EventInput {
@@ -101,6 +105,7 @@ export interface SourceResponse {
   last_scraped_at?: string | null;
   created_at: string;
   events_count: number;
+  reliability_score: number;
 }
 
 export interface SourceInput {
@@ -221,6 +226,19 @@ export interface TelegramChannelResponse {
   listener_status?: ListenerStatus | null;
 }
 
+export interface HourlyCount {
+  hour: string;
+  total: number;
+  red: number;
+  blue: number;
+  neutral: number;
+}
+
+export interface EventTimelineResponse {
+  hours: HourlyCount[];
+  window_hours: number;
+}
+
 export type ListEventsParams = {
 category?: string;
 side?: ListEventsSide;
@@ -233,6 +251,7 @@ search?: string;
 lat?: number;
 lng?: number;
 radius_km?: number;
+is_important?: boolean;
 limit?: number;
 offset?: number;
 };
@@ -245,6 +264,28 @@ export const ListEventsSide = {
   blue: 'blue',
   neutral: 'neutral',
 } as const;
+
+export type ListAlertsParams = {
+side?: ListAlertsSide;
+limit?: number;
+};
+
+export type ListAlertsSide = typeof ListAlertsSide[keyof typeof ListAlertsSide];
+
+
+export const ListAlertsSide = {
+  red: 'red',
+  blue: 'blue',
+  neutral: 'neutral',
+} as const;
+
+export type GetEventsTimelineParams = {
+/**
+ * @minimum 1
+ * @maximum 168
+ */
+hours?: number;
+};
 
 export type TelegramRequestCode200 = {
   message: string;

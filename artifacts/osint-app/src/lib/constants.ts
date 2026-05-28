@@ -25,35 +25,63 @@ export const CATEGORY_HEX_COLORS: Record<string, string> = {
   other: "#64748b",
 };
 
-// ── Side (Red / Blue / Neutral) ───────────────────────────────────────────────
+// ── Side (Red / Blue / Neutral) ────────────────────────────────────────────────
 export const SIDE_LABELS: Record<string, string> = {
-  red: "Red Side",
-  blue: "Blue Side",
+  red:     "عدو",     // Adversary / Red Force
+  blue:    "צה\"ל",  // IDF / Blue Force
+  neutral: "ניטרלי",  // Neutral
+};
+
+export const SIDE_LABELS_EN: Record<string, string> = {
+  red:     "Adversary",
+  blue:    "IDF / Blue",
   neutral: "Neutral",
 };
 
 export const SIDE_COLORS: Record<string, string> = {
-  red: "bg-red-600",
-  blue: "bg-blue-600",
+  red:     "bg-red-600",
+  blue:    "bg-blue-600",
   neutral: "bg-slate-500",
 };
 
 export const SIDE_TEXT_COLORS: Record<string, string> = {
-  red: "text-red-400",
-  blue: "text-blue-400",
+  red:     "text-red-400",
+  blue:    "text-blue-400",
   neutral: "text-slate-400",
 };
 
 export const SIDE_BORDER_COLORS: Record<string, string> = {
-  red: "border-red-500/40",
-  blue: "border-blue-500/40",
+  red:     "border-red-500/40",
+  blue:    "border-blue-500/40",
   neutral: "border-slate-500/40",
 };
 
 export const SIDE_HEX_COLORS: Record<string, string> = {
-  red: "#dc2626",
-  blue: "#2563eb",
+  red:     "#dc2626",
+  blue:    "#2563eb",
   neutral: "#64748b",
 };
 
-export const CATEGORIES = ["military", "political", "humanitarian", "crime", "accident", "other"] as const;
+// Recharts-compatible fill colors
+export const SIDE_CHART_COLORS: Record<string, string> = {
+  red:     "#dc2626",
+  blue:    "#2563eb",
+  neutral: "#64748b",
+};
+
+export const CATEGORIES = [
+  "military", "political", "humanitarian", "crime", "accident", "other",
+] as const;
+
+// ── Importance tag display metadata ───────────────────────────────────────────
+export const IMPORTANCE_TAG_LABELS: Record<string, { label: string; icon: string }> = {
+  rockets:           { label: "טילים/רקטות",       icon: "🚀" },
+  uav:               { label: 'כטב"מ',              icon: "🛸" },
+  airstrike:         { label: "תקיפה אווירית",      icon: "✈️" },
+  casualties:        { label: "נפגעים",             icon: "🩸" },
+  explosion:         { label: "פיצוץ",              icon: "💥" },
+  heavy_bombardment: { label: "הפגזה כבדה",         icon: "💣" },
+  idf_statement:     { label: 'הודעת צה"ל',         icon: "📢" },
+  hezbollah:         { label: "חיזבאללה",           icon: "⚠️" },
+  warning_alert:     { label: "אזעקה",              icon: "🚨" },
+};

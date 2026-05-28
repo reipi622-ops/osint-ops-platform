@@ -19,6 +19,7 @@ search?: string;
 lat?: number;
 lng?: number;
 radius_km?: number;
+is_important?: boolean;
 limit?: number;
 offset?: number;
 };

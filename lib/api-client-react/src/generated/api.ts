@@ -24,8 +24,11 @@ import type {
   EventInput,
   EventListResponse,
   EventResponse,
+  EventTimelineResponse,
   EventUpdate,
+  GetEventsTimelineParams,
   HealthStatus,
+  ListAlertsParams,
   ListEventsParams,
   ScraperStatus,
   SourceInput,
@@ -287,6 +290,174 @@ export const useCreateEvent = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateEventMutationOptions(options));
     }
+
+export const getListAlertsUrl = (params?: ListAlertsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/events/alerts?${stringifiedParams}` : `/api/events/alerts`
+}
+
+/**
+ * @summary List important/high-priority events
+ */
+export const listAlerts = async (params?: ListAlertsParams, options?: RequestInit): Promise<EventListResponse> => {
+
+  return customFetch<EventListResponse>(getListAlertsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAlertsQueryKey = (params?: ListAlertsParams,) => {
+    return [
+    `/api/events/alerts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAlertsQueryOptions = <TData = Awaited<ReturnType<typeof listAlerts>>, TError = ErrorType<unknown>>(params?: ListAlertsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAlertsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAlerts>>> = ({ signal }) => listAlerts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAlerts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof listAlerts>>>
+export type ListAlertsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List important/high-priority events
+ */
+
+export function useListAlerts<TData = Awaited<ReturnType<typeof listAlerts>>, TError = ErrorType<unknown>>(
+ params?: ListAlertsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAlertsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetEventsTimelineUrl = (params?: GetEventsTimelineParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/events/timeline?${stringifiedParams}` : `/api/events/timeline`
+}
+
+/**
+ * @summary Get hourly event counts for the last N hours
+ */
+export const getEventsTimeline = async (params?: GetEventsTimelineParams, options?: RequestInit): Promise<EventTimelineResponse> => {
+
+  return customFetch<EventTimelineResponse>(getGetEventsTimelineUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEventsTimelineQueryKey = (params?: GetEventsTimelineParams,) => {
+    return [
+    `/api/events/timeline`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEventsTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getEventsTimeline>>, TError = ErrorType<unknown>>(params?: GetEventsTimelineParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEventsTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEventsTimelineQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEventsTimeline>>> = ({ signal }) => getEventsTimeline(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEventsTimeline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEventsTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getEventsTimeline>>>
+export type GetEventsTimelineQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get hourly event counts for the last N hours
+ */
+
+export function useGetEventsTimeline<TData = Awaited<ReturnType<typeof getEventsTimeline>>, TError = ErrorType<unknown>>(
+ params?: GetEventsTimelineParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEventsTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEventsTimelineQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetDashboardStatsUrl = () => {
 

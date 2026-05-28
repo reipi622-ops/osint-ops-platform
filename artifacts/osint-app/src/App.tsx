@@ -8,6 +8,8 @@ import Dashboard from "@/pages/dashboard";
 import EventsList from "@/pages/events";
 import SourcesList from "@/pages/sources";
 import TelegramAdmin from "@/pages/telegram-admin";
+import AlertsPage from "@/pages/alerts";
+import TimelinePage from "@/pages/timeline";
 
 const queryClient = new QueryClient();
 
@@ -17,6 +19,8 @@ function Router() {
       <Route path="/" component={MapView} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/events" component={EventsList} />
+      <Route path="/alerts" component={AlertsPage} />
+      <Route path="/timeline" component={TimelinePage} />
       <Route path="/sources" component={SourcesList} />
       <Route path="/telegram" component={TelegramAdmin} />
       <Route component={NotFound} />

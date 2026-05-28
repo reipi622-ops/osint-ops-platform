@@ -72,6 +72,9 @@ paths:
         - name: radius_km
           in: query
           schema: { type: number }
+        - name: is_important
+          in: query
+          schema: { type: boolean }
         - name: limit
           in: query
           schema: { type: integer, default: 50 }
@@ -102,6 +105,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EventResponse"
+
+  /events/alerts:
+    get:
+      operationId: listAlerts
+      tags: [events]
+      summary: List important/high-priority events
+      parameters:
+        - name: side
+          in: query
+          schema: { type: string, enum: [red, blue, neutral] }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: List of important events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventListResponse"
+
+  /events/timeline:
+    get:
+      operationId: getEventsTimeline
+      tags: [events]
+      summary: Get hourly event counts for the last N hours
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, default: 24, minimum: 1, maximum: 168 }
+      responses:
+        "200":
+          description: Hourly event counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventTimelineResponse"
 
   /events/stats:
     get:
@@ -497,6 +537,9 @@ components:
         scraped_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
         event_date: { type: ["string", "null"], format: date-time }
+        is_important: { type: boolean, default: false }
+        importance_score: { type: number, default: 0.0 }
+        importance_tags: { type: ["string", "null"] }
       required: [id, title, category, side, confidence, original_lang, event_hash, is_duplicate, scraped_at, created_at]
 
     EventInput:
@@ -554,7 +597,8 @@ components:
         last_scraped_at: { type: ["string", "null"], format: date-time }
         created_at: { type: string, format: date-time }
         events_count: { type: integer }
-      required: [id, name, type, url, is_active, created_at, events_count]
+        reliability_score: { type: number, default: 0.5 }
+      required: [id, name, type, url, is_active, created_at, events_count, reliability_score]
 
     SourceInput:
       type: object
@@ -702,3 +746,23 @@ components:
             - $ref: "#/components/schemas/ListenerStatus"
             - type: "null"
       required: [id, username, is_active, is_approved, is_public_verified, last_message_id, messages_processed, created_at]
+
+    HourlyCount:
+      type: object
+      properties:
+        hour: { type: string }
+        total: { type: integer }
+        red: { type: integer }
+        blue: { type: integer }
+        neutral: { type: integer }
+      required: [hour, total, red, blue, neutral]
+
+    EventTimelineResponse:
+      type: object
+      properties:
+        hours:
+          type: array
+          items:
+            $ref: "#/components/schemas/HourlyCount"
+        window_hours: { type: integer }
+      required: [hours, window_hours]

@@ -40,4 +40,8 @@ export interface EventResponse {
   created_at: Date;
   /** @nullable */
   event_date?: Date | null;
+  is_important?: boolean;
+  importance_score?: number;
+  /** @nullable */
+  importance_tags?: string | null;
 }

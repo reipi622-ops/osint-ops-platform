@@ -37,11 +37,14 @@ export const ListEventsQueryParams = zod.object({
   "lat": zod.coerce.number().optional(),
   "lng": zod.coerce.number().optional(),
   "radius_km": zod.coerce.number().optional(),
+  "is_important": zod.coerce.boolean().optional(),
   "limit": zod.coerce.number().default(listEventsQueryLimitDefault),
   "offset": zod.coerce.number().default(listEventsQueryOffsetDefault)
 })
 
 export const listEventsResponseItemsItemSideDefault = `neutral`;
+export const listEventsResponseItemsItemIsImportantDefault = false;
+export const listEventsResponseItemsItemImportanceScoreDefault = 0;
 
 export const ListEventsResponse = zod.object({
   "items": zod.array(zod.object({
@@ -65,7 +68,10 @@ export const ListEventsResponse = zod.object({
   "is_duplicate": zod.boolean(),
   "scraped_at": zod.coerce.date(),
   "created_at": zod.coerce.date(),
-  "event_date": zod.coerce.date().nullish()
+  "event_date": zod.coerce.date().nullish(),
+  "is_important": zod.boolean().default(listEventsResponseItemsItemIsImportantDefault),
+  "importance_score": zod.number().default(listEventsResponseItemsItemImportanceScoreDefault),
+  "importance_tags": zod.string().nullish()
 })),
   "total": zod.number(),
   "offset": zod.number(),
@@ -100,6 +106,77 @@ export const CreateEventBody = zod.object({
 
 
 /**
+ * @summary List important/high-priority events
+ */
+export const listAlertsQueryLimitDefault = 50;
+
+export const ListAlertsQueryParams = zod.object({
+  "side": zod.enum(['red', 'blue', 'neutral']).optional(),
+  "limit": zod.coerce.number().default(listAlertsQueryLimitDefault)
+})
+
+export const listAlertsResponseItemsItemSideDefault = `neutral`;
+export const listAlertsResponseItemsItemIsImportantDefault = false;
+export const listAlertsResponseItemsItemImportanceScoreDefault = 0;
+
+export const ListAlertsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "title_he": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "description_he": zod.string().nullish(),
+  "category": zod.string(),
+  "side": zod.enum(['red', 'blue', 'neutral']).default(listAlertsResponseItemsItemSideDefault),
+  "confidence": zod.number(),
+  "source_id": zod.number().nullish(),
+  "source_name": zod.string().nullish(),
+  "source_url": zod.string().nullish(),
+  "location_name": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish(),
+  "original_lang": zod.string(),
+  "raw_text": zod.string().nullish(),
+  "event_hash": zod.string(),
+  "is_duplicate": zod.boolean(),
+  "scraped_at": zod.coerce.date(),
+  "created_at": zod.coerce.date(),
+  "event_date": zod.coerce.date().nullish(),
+  "is_important": zod.boolean().default(listAlertsResponseItemsItemIsImportantDefault),
+  "importance_score": zod.number().default(listAlertsResponseItemsItemImportanceScoreDefault),
+  "importance_tags": zod.string().nullish()
+})),
+  "total": zod.number(),
+  "offset": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Get hourly event counts for the last N hours
+ */
+export const getEventsTimelineQueryHoursDefault = 24;
+export const getEventsTimelineQueryHoursMax = 168;
+
+
+
+export const GetEventsTimelineQueryParams = zod.object({
+  "hours": zod.coerce.number().min(1).max(getEventsTimelineQueryHoursMax).default(getEventsTimelineQueryHoursDefault)
+})
+
+export const GetEventsTimelineResponse = zod.object({
+  "hours": zod.array(zod.object({
+  "hour": zod.string(),
+  "total": zod.number(),
+  "red": zod.number(),
+  "blue": zod.number(),
+  "neutral": zod.number()
+})),
+  "window_hours": zod.number()
+})
+
+
+/**
  * @summary Get dashboard statistics
  */
 export const GetDashboardStatsResponse = zod.object({
@@ -130,6 +207,8 @@ export const GetEventParams = zod.object({
 })
 
 export const getEventResponseSideDefault = `neutral`;
+export const getEventResponseIsImportantDefault = false;
+export const getEventResponseImportanceScoreDefault = 0;
 
 export const GetEventResponse = zod.object({
   "id": zod.number(),
@@ -152,7 +231,10 @@ export const GetEventResponse = zod.object({
   "is_duplicate": zod.boolean(),
   "scraped_at": zod.coerce.date(),
   "created_at": zod.coerce.date(),
-  "event_date": zod.coerce.date().nullish()
+  "event_date": zod.coerce.date().nullish(),
+  "is_important": zod.boolean().default(getEventResponseIsImportantDefault),
+  "importance_score": zod.number().default(getEventResponseImportanceScoreDefault),
+  "importance_tags": zod.string().nullish()
 })
 
 
@@ -175,6 +257,8 @@ export const UpdateEventBody = zod.object({
 })
 
 export const updateEventResponseSideDefault = `neutral`;
+export const updateEventResponseIsImportantDefault = false;
+export const updateEventResponseImportanceScoreDefault = 0;
 
 export const UpdateEventResponse = zod.object({
   "id": zod.number(),
@@ -197,7 +281,10 @@ export const UpdateEventResponse = zod.object({
   "is_duplicate": zod.boolean(),
   "scraped_at": zod.coerce.date(),
   "created_at": zod.coerce.date(),
-  "event_date": zod.coerce.date().nullish()
+  "event_date": zod.coerce.date().nullish(),
+  "is_important": zod.boolean().default(updateEventResponseIsImportantDefault),
+  "importance_score": zod.number().default(updateEventResponseImportanceScoreDefault),
+  "importance_tags": zod.string().nullish()
 })
 
 
@@ -212,6 +299,8 @@ export const DeleteEventParams = zod.object({
 /**
  * @summary List all sources
  */
+export const listSourcesResponseReliabilityScoreDefault = 0.5;
+
 export const ListSourcesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -220,7 +309,8 @@ export const ListSourcesResponseItem = zod.object({
   "is_active": zod.boolean(),
   "last_scraped_at": zod.coerce.date().nullish(),
   "created_at": zod.coerce.date(),
-  "events_count": zod.number()
+  "events_count": zod.number(),
+  "reliability_score": zod.number().default(listSourcesResponseReliabilityScoreDefault)
 })
 export const ListSourcesResponse = zod.array(ListSourcesResponseItem)
 
@@ -252,6 +342,8 @@ export const UpdateSourceBody = zod.object({
   "is_active": zod.boolean().optional()
 })
 
+export const updateSourceResponseReliabilityScoreDefault = 0.5;
+
 export const UpdateSourceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -260,7 +352,8 @@ export const UpdateSourceResponse = zod.object({
   "is_active": zod.boolean(),
   "last_scraped_at": zod.coerce.date().nullish(),
   "created_at": zod.coerce.date(),
-  "events_count": zod.number()
+  "events_count": zod.number(),
+  "reliability_score": zod.number().default(updateSourceResponseReliabilityScoreDefault)
 })
 
 

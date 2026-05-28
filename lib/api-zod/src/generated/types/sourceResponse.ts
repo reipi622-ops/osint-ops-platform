@@ -16,4 +16,5 @@ export interface SourceResponse {
   last_scraped_at?: Date | null;
   created_at: Date;
   events_count: number;
+  reliability_score: number;
 }

@@ -26,6 +26,9 @@ def _migrate_db() -> None:
         ],
         "events": [
             "ALTER TABLE events ADD COLUMN side TEXT NOT NULL DEFAULT 'neutral'",
+            "ALTER TABLE events ADD COLUMN is_important INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE events ADD COLUMN importance_score REAL DEFAULT 0.0",
+            "ALTER TABLE events ADD COLUMN importance_tags TEXT",
         ],
     }
     with engine.connect() as conn:

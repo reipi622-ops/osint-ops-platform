@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 from typing import Optional, List, Dict
 from datetime import datetime
 
@@ -28,6 +28,25 @@ class SourceResponse(SourceBase):
     created_at: datetime
     events_count: int = 0
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def reliability_score(self) -> float:
+        """
+        Computed reliability score based on source type.
+        telegram (manually approved + public-verified) → 0.85
+        rss                                            → 0.60
+        web                                            → 0.55
+        other / unknown                                → 0.50
+        """
+        _type = getattr(self, "type", "") or ""
+        if _type == "telegram":
+            return 0.85
+        if _type == "rss":
+            return 0.60
+        if _type == "web":
+            return 0.55
+        return 0.50
+
 
 class EventInput(BaseModel):
     title: str
@@ -46,6 +65,9 @@ class EventInput(BaseModel):
     original_lang: str = "ar"
     raw_text: Optional[str] = None
     event_date: Optional[datetime] = None
+    is_important: bool = False
+    importance_score: float = 0.0
+    importance_tags: Optional[str] = None
 
 
 class EventUpdate(BaseModel):
@@ -58,6 +80,7 @@ class EventUpdate(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     location_name: Optional[str] = None
+    is_important: Optional[bool] = None
 
 
 class EventResponse(BaseModel):
@@ -80,6 +103,9 @@ class EventResponse(BaseModel):
     raw_text: Optional[str] = None
     event_hash: str
     is_duplicate: bool
+    is_important: bool = False
+    importance_score: float = 0.0
+    importance_tags: Optional[str] = None
     event_date: Optional[datetime] = None
     scraped_at: datetime
     created_at: datetime
@@ -90,6 +116,19 @@ class EventListResponse(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class HourlyCount(BaseModel):
+    hour: str        # ISO timestamp truncated to hour, e.g. "2024-01-01T14:00:00"
+    total: int
+    red: int
+    blue: int
+    neutral: int
+
+
+class EventTimelineResponse(BaseModel):
+    hours: List[HourlyCount]
+    window_hours: int
 
 
 class CategoryCount(BaseModel):

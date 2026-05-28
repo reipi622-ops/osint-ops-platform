@@ -100,6 +100,78 @@ async def events_stream(request: Request):
     )
 
 
+@router.get("/alerts", response_model=schemas.EventListResponse)
+async def list_alerts(
+    side: Optional[str] = Query(None),
+    limit: int = Query(50, le=500),
+    db: Session = Depends(get_db),
+):
+    """Return the most recent important/high-priority events."""
+    query = (
+        db.query(models.Event)
+        .filter(models.Event.is_duplicate == False, models.Event.is_important == True)
+    )
+    if side:
+        query = query.filter(models.Event.side == side)
+    total = query.count()
+    items = (
+        query
+        .order_by(models.Event.importance_score.desc(), models.Event.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return schemas.EventListResponse(items=items, total=total, offset=0, limit=limit)
+
+
+@router.get("/timeline", response_model=schemas.EventTimelineResponse)
+async def get_timeline(
+    hours: int = Query(24, ge=1, le=168),
+    db: Session = Depends(get_db),
+):
+    """Return hourly event counts (total + by side) for the last N hours."""
+    now = datetime.utcnow()
+    cutoff = now - timedelta(hours=hours)
+
+    events = (
+        db.query(models.Event.created_at, models.Event.side)
+        .filter(
+            models.Event.is_duplicate == False,
+            models.Event.created_at >= cutoff,
+        )
+        .all()
+    )
+
+    # Bucket by hour
+    buckets: dict[str, dict[str, int]] = {}
+    for created_at, side in events:
+        if created_at is None:
+            continue
+        # truncate to hour
+        h = created_at.replace(minute=0, second=0, microsecond=0)
+        key = h.strftime("%Y-%m-%dT%H:00:00")
+        if key not in buckets:
+            buckets[key] = {"total": 0, "red": 0, "blue": 0, "neutral": 0}
+        s = side or "neutral"
+        buckets[key]["total"] += 1
+        buckets[key][s] = buckets[key].get(s, 0) + 1
+
+    # Fill in all hours (even empty ones) for a continuous timeline
+    result: list[schemas.HourlyCount] = []
+    for i in range(hours - 1, -1, -1):
+        h = (now - timedelta(hours=i)).replace(minute=0, second=0, microsecond=0)
+        key = h.strftime("%Y-%m-%dT%H:00:00")
+        b = buckets.get(key, {"total": 0, "red": 0, "blue": 0, "neutral": 0})
+        result.append(schemas.HourlyCount(
+            hour=key,
+            total=b["total"],
+            red=b.get("red", 0),
+            blue=b.get("blue", 0),
+            neutral=b.get("neutral", 0),
+        ))
+
+    return schemas.EventTimelineResponse(hours=result, window_hours=hours)
+
+
 @router.get("", response_model=schemas.EventListResponse)
 async def list_events(
     category: Optional[str] = Query(None),
@@ -110,10 +182,11 @@ async def list_events(
     date_to: Optional[datetime] = Query(None),
     search: Optional[str] = Query(None),
     has_location: Optional[bool] = Query(None),
+    is_important: Optional[bool] = Query(None),
     lat: Optional[float] = Query(None),
     lng: Optional[float] = Query(None),
     radius_km: Optional[float] = Query(None),
-    limit: int = Query(50, le=200),
+    limit: int = Query(50, le=500),
     offset: int = Query(0),
     db: Session = Depends(get_db),
 ):
@@ -129,6 +202,10 @@ async def list_events(
         query = query.filter(models.Event.lat.isnot(None), models.Event.lng.isnot(None))
     if has_location is False:
         query = query.filter(or_(models.Event.lat.is_(None), models.Event.lng.is_(None)))
+    if is_important is True:
+        query = query.filter(models.Event.is_important == True)
+    if is_important is False:
+        query = query.filter(models.Event.is_important == False)
     if source_id:
         query = query.filter(models.Event.source_id == source_id)
     if date_from:
@@ -187,7 +264,6 @@ async def create_event(event: schemas.EventInput, db: Session = Depends(get_db))
     db.commit()
     db.refresh(db_event)
 
-    # Broadcast new manually-created events too
     from app.schemas import EventResponse
     from pydantic import TypeAdapter
     payload = TypeAdapter(EventResponse).validate_python(db_event).model_dump(mode="json")

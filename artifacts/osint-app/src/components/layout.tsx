@@ -1,13 +1,22 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Map, LayoutDashboard, List, Rss, MessageSquare } from "lucide-react";
-import { useGetTelegramAuthStatus, getGetTelegramAuthStatusQueryKey } from "@workspace/api-client-react";
+import { Map, LayoutDashboard, List, Rss, MessageSquare, Bell, Clock } from "lucide-react";
+import {
+  useGetTelegramAuthStatus, getGetTelegramAuthStatusQueryKey,
+  useListAlerts, getListAlertsQueryKey,
+} from "@workspace/api-client-react";
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
-  const { data: telegramStatus } = useGetTelegramAuthStatus({ 
-    query: { queryKey: getGetTelegramAuthStatusQueryKey(), refetchInterval: 10000 } 
+
+  const { data: telegramStatus } = useGetTelegramAuthStatus({
+    query: { queryKey: getGetTelegramAuthStatusQueryKey(), refetchInterval: 10000 },
   });
+
+  const { data: alertsData } = useListAlerts(
+    { limit: 1 },
+    { query: { queryKey: getListAlertsQueryKey({ limit: 1 }), refetchInterval: 15000 } },
+  );
 
   const getTelegramStatusDot = () => {
     if (telegramStatus?.authorized) return "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]";
@@ -15,12 +24,16 @@ export function Layout({ children }: { children: ReactNode }) {
     return "bg-slate-500";
   };
 
+  const alertCount = alertsData?.total ?? 0;
+
   const navItems = [
-    { href: "/", label: "Live Map", icon: Map },
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/events", label: "Events", icon: List },
-    { href: "/sources", label: "Sources", icon: Rss },
-    { href: "/telegram", label: "Telegram", icon: MessageSquare, badge: getTelegramStatusDot() },
+    { href: "/",         label: "Live Map",  icon: Map },
+    { href: "/dashboard",label: "Dashboard", icon: LayoutDashboard },
+    { href: "/events",   label: "Events",    icon: List },
+    { href: "/alerts",   label: "Alerts",    icon: Bell,         alertBadge: alertCount > 0 },
+    { href: "/timeline", label: "Timeline",  icon: Clock },
+    { href: "/sources",  label: "Sources",   icon: Rss },
+    { href: "/telegram", label: "Telegram",  icon: MessageSquare, badge: getTelegramStatusDot() },
   ];
 
   return (
@@ -35,7 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
             Middle East Region
           </p>
         </div>
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = location === item.href;
             const Icon = item.icon;
@@ -48,10 +61,17 @@ export function Layout({ children }: { children: ReactNode }) {
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="flex-1">{item.label}</span>
-                  {item.badge && (
-                    <span className={`w-2 h-2 rounded-full ${item.badge}`} />
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="flex-1 text-sm">{item.label}</span>
+                  {/* Status dot (Telegram) */}
+                  {item.badge && !item.alertBadge && (
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${item.badge}`} />
+                  )}
+                  {/* Alert count badge */}
+                  {item.alertBadge && alertCount > 0 && (
+                    <span className="shrink-0 min-w-[18px] h-[18px] rounded-full bg-orange-500 text-white text-[9px] font-mono font-bold flex items-center justify-center px-1">
+                      {alertCount > 99 ? "99+" : alertCount}
+                    </span>
                   )}
                 </div>
               </Link>
@@ -59,7 +79,7 @@ export function Layout({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="p-4 border-t border-border text-xs text-muted-foreground font-mono">
-          SYSTEM: ONLINE<br/>
+          SYSTEM: ONLINE<br />
           DEFCON: 3
         </div>
       </aside>

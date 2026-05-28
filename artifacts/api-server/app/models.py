@@ -43,6 +43,11 @@ class Event(Base):
     event_hash = Column(String, unique=True, index=True)
     is_duplicate = Column(Boolean, default=False)
 
+    # Importance / alert fields
+    is_important = Column(Boolean, default=False, index=True)
+    importance_score = Column(Float, default=0.0)
+    importance_tags = Column(String, nullable=True)  # comma-separated tags
+
     event_date = Column(DateTime, nullable=True)
     scraped_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)

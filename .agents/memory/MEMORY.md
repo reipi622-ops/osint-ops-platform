@@ -1,2 +1,3 @@
 - [Python on Nix](python-nix.md) — pip needs `--break-system-packages` in Nix; use `python3 -m pip` and `python3 -m uvicorn`, pre-install before workflow start
 - [React Query hook options](react-query-hook-options.md) — query hooks require explicit `queryKey` inside options even when using refetchInterval or enabled
+- [OSINT Stack](osint-stack.md) — FastAPI+SQLite+Telethon backend, React/Vite+Leaflet+Recharts frontend; key quirks for this project
