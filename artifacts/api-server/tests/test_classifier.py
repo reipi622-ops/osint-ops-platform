@@ -10,6 +10,7 @@ from app.services.classifier import (
     detect_importance,
     detect_propaganda,
     compute_confidence_level,
+    compute_escalation_level,
     detect_text_has_media_keywords,
 )
 
@@ -173,6 +174,80 @@ def test_confidence_level_media_boost():
     # 0.65 + 0.10 = 0.75 → high
     level = compute_confidence_level(0.65, 0.5, 0, True, 0.1)
     assert level == "high"
+
+
+# ── compute_escalation_level ──────────────────────────────────────────────────
+
+def test_escalation_level_low_default():
+    level = compute_escalation_level(0.1, 0.3, 0, "low", "")
+    assert level == "low"
+
+
+def test_escalation_level_medium_from_score():
+    level = compute_escalation_level(0.45, 0.5, 0, "low", "")
+    assert level == "medium"
+
+
+def test_escalation_level_medium_from_confidence_level():
+    level = compute_escalation_level(0.25, 0.4, 0, "medium", "")
+    assert level == "medium"
+
+
+def test_escalation_level_high_from_score_and_level():
+    level = compute_escalation_level(0.65, 0.7, 0, "high", "airstrike")
+    assert level == "high"
+
+
+def test_escalation_level_high_from_confirmation():
+    level = compute_escalation_level(0.55, 0.5, 1, "medium", "rockets")
+    assert level == "high"
+
+
+def test_escalation_level_critical_extreme_score():
+    level = compute_escalation_level(0.92, 0.8, 0, "low", "")
+    assert level == "critical"
+
+
+def test_escalation_level_critical_verified_high_threat():
+    level = compute_escalation_level(0.70, 0.8, 0, "verified", "airstrike,casualties")
+    assert level == "critical"
+
+
+def test_escalation_level_critical_multiconfirmed():
+    level = compute_escalation_level(0.78, 0.7, 2, "high", "rockets")
+    assert level == "critical"
+
+
+# ── detect_importance expanded tags ───────────────────────────────────────────
+
+def test_detect_importance_infiltration():
+    is_imp, score, tags = detect_importance("Armed cell infiltrated across the border fence")
+    assert is_imp
+    assert "infiltration" in tags
+
+
+def test_detect_importance_interception():
+    is_imp, score, tags = detect_importance("Iron Dome intercepted multiple incoming missiles")
+    assert is_imp
+    assert "interception" in tags
+
+
+def test_detect_importance_artillery():
+    is_imp, score, tags = detect_importance("Artillery barrage hit positions in the northern sector")
+    assert is_imp
+    assert "artillery" in tags
+
+
+def test_detect_importance_evacuation():
+    is_imp, score, tags = detect_importance("Emergency evacuation ordered for civilians in the area")
+    assert is_imp
+    assert "evacuation" in tags
+
+
+def test_detect_importance_cyber():
+    is_imp, score, tags = detect_importance("Cyberattack disrupted critical infrastructure power grid")
+    assert is_imp
+    assert "cyber" in tags
 
 
 # ── detect_text_has_media_keywords ────────────────────────────────────────────

@@ -7,7 +7,15 @@ import feedparser
 
 from app.database import SessionLocal
 from app import models, schemas
-from app.services.classifier import classify_event, classify_side
+from app.services.classifier import (
+    classify_event,
+    classify_side,
+    detect_importance,
+    detect_propaganda,
+    compute_confidence_level,
+    compute_escalation_level,
+    detect_text_has_media_keywords,
+)
 from app.services.deduplicator import compute_hash
 from app.services.geolocator import extract_location
 from app.services.translator import translate_text
@@ -83,7 +91,25 @@ def _process_entry(entry, source: models.Source, db) -> bool:
 
     category, confidence = classify_event(title_orig, desc_orig)
     side, _side_conf = classify_side(title_orig, desc_orig)
-    location_name, lat, lng = extract_location(f"{title_orig} {desc_orig}")
+    combined = f"{title_orig} {desc_orig}"
+    is_important, importance_score, importance_tags = detect_importance(title_orig, desc_orig)
+    propaganda_score = detect_propaganda(combined)
+    has_media = detect_text_has_media_keywords(combined)
+    confidence_level = compute_confidence_level(
+        confidence=confidence,
+        importance_score=importance_score,
+        confirmation_count=0,
+        has_media=has_media,
+        propaganda_score=propaganda_score,
+    )
+    escalation_level = compute_escalation_level(
+        importance_score=importance_score,
+        confidence=confidence,
+        confirmation_count=0,
+        confidence_level=confidence_level,
+        threat_tags=importance_tags or "",
+    )
+    location_name, lat, lng = extract_location(combined)
 
     published = getattr(entry, "published_parsed", None)
     event_date = datetime(*published[:6]) if published else datetime.utcnow()
@@ -96,6 +122,14 @@ def _process_entry(entry, source: models.Source, db) -> bool:
         category=category,
         side=side,
         confidence=confidence,
+        is_important=is_important,
+        importance_score=importance_score,
+        importance_tags=importance_tags or None,
+        propaganda_score=propaganda_score,
+        has_media=has_media,
+        confidence_level=confidence_level,
+        escalation_level=escalation_level,
+        confirmation_count=0,
         source_id=source.id,
         source_name=source.name,
         source_url=url,

@@ -498,6 +498,7 @@ def _process_message_sync(
         detect_propaganda,
         detect_text_has_media_keywords,
         compute_confidence_level,
+        compute_escalation_level,
     )
     from app.services.deduplicator import (
         compute_hash,
@@ -551,6 +552,14 @@ def _process_message_sync(
             propaganda_score=propaganda_score,
         )
 
+        escalation_level = compute_escalation_level(
+            importance_score=importance_score,
+            confidence=confidence,
+            confirmation_count=0,
+            confidence_level=confidence_level,
+            threat_tags=importance_tags or "",
+        )
+
         location_name, lat, lng = extract_location(text)
 
         source_url = f"https://t.me/{channel_username}"
@@ -580,6 +589,7 @@ def _process_message_sync(
             has_media=effective_has_media,
             propaganda_score=propaganda_score,
             confidence_level=confidence_level,
+            escalation_level=escalation_level,
             confirmation_count=0,
             confirming_sources=None,
             source_id=source.id,
@@ -627,10 +637,24 @@ def _process_message_sync(
 
         register_event(text, ev.id)
 
+        # Register in pattern engine (non-blocking; errors must not break the pipeline)
+        try:
+            from app.services.pattern_engine import register_event_for_patterns
+            register_event_for_patterns(
+                event_id=ev.id,
+                side=side,
+                importance_score=importance_score,
+                source_name=f"@{channel_username}",
+                event_hash=event_hash,
+                location_hint=location_name,
+            )
+        except Exception as pe:
+            logger.debug("Pattern engine registration skipped: %s", pe)
+
         if is_important:
             logger.info(
-                "Telegram: ⚠ IMPORTANT event id=%d score=%.2f tags=[%s] level=%s @%s",
-                ev.id, importance_score, importance_tags, confidence_level, channel_username,
+                "Telegram: ⚠ IMPORTANT event id=%d score=%.2f tags=[%s] level=%s escalation=%s @%s",
+                ev.id, importance_score, importance_tags, confidence_level, escalation_level, channel_username,
             )
         if propaganda_score >= 0.50:
             logger.warning(

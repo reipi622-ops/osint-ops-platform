@@ -13,6 +13,8 @@ from app.database import engine
 from app import models
 from app.routes import health, events, sources, scraper as scraper_router
 from app.routes import telegram as telegram_router
+from app.routes import patterns as patterns_router
+from app.routes import geo as geo_router
 from app.services.scraper import initialize_default_sources
 from app.services.seed import seed_sample_events
 from app.services import telegram_monitor
@@ -108,6 +110,8 @@ def _migrate_db() -> None:
             "ALTER TABLE events ADD COLUMN has_media INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE events ADD COLUMN propaganda_score REAL DEFAULT 0.0",
             "ALTER TABLE events ADD COLUMN confidence_level TEXT NOT NULL DEFAULT 'low'",
+            # Operational intelligence fields (v3)
+            "ALTER TABLE events ADD COLUMN escalation_level TEXT NOT NULL DEFAULT 'low'",
         ],
     }
     with engine.connect() as conn:
@@ -128,6 +132,20 @@ def _migrate_db() -> None:
                         logger.info("DB migration: %s.%s added", table, col)
                     except Exception as exc:
                         logger.warning("DB migration skipped %s.%s: %s", table, col, exc)
+
+        # ── DB indexes (idempotent CREATE INDEX IF NOT EXISTS) ─────────────────
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS ix_events_created_at ON events (created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_events_escalation_level ON events (escalation_level)",
+            "CREATE INDEX IF NOT EXISTS ix_events_side_created_at ON events (side, created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_events_importance_score ON events (importance_score)",
+        ]
+        for idx_stmt in indexes:
+            try:
+                conn.execute(sa_text(idx_stmt))
+                conn.commit()
+            except Exception as exc:
+                logger.debug("Index skipped: %s", exc)
 
 
 # ── Lifespan ───────────────────────────────────────────────────────────────────
@@ -171,6 +189,8 @@ app.include_router(events.router, prefix="/api")
 app.include_router(sources.router, prefix="/api")
 app.include_router(scraper_router.router, prefix="/api")
 app.include_router(telegram_router.router, prefix="/api")
+app.include_router(patterns_router.router, prefix="/api")
+app.include_router(geo_router.router, prefix="/api")
 
 
 @app.get("/api")

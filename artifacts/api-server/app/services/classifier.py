@@ -148,6 +148,36 @@ _IMPORTANCE_RULES: list[tuple[str, float, list[str]]] = [
         "صافرات إنذار", "إنذار", "دفاع مدني", "صفارات الإنذار",
         "تحذير", "إشعار تحذير", "تنبيه",
     ]),
+    ("infiltration", 0.65, [
+        "infiltration", "infiltrated", "crossed the border", "breached the fence",
+        "ground incursion", "crossed into", "anti-tank ambush", "cell entered",
+        "تسلل", "اختراق", "تجاوز الحدود", "اقتحام بري", "خلية تسللت",
+        "عبر الحدود", "اقتحمت",
+    ]),
+    ("interception", 0.60, [
+        "intercepted", "interception", "iron dome", "david's sling", "arrow",
+        "anti-missile", "missile defense", "shot down", "air defense",
+        "اعتراض", "تم اعتراض", "القبة الحديدية", "دفاع جوي",
+        "منظومة دفاع", "أسقطت", "صاروخ اعتراضي",
+    ]),
+    ("artillery", 0.65, [
+        "artillery", "tank shell", "mortar", "howitzer", "field gun", "shelling",
+        "cannon", "tank fire", "artillery barrage", "tank battalion",
+        "مدفعية", "قذيفة مدفعية", "هاون", "دبابة", "مدفع", "قصف مدفعي",
+        "رشق مدفعي", "طلقة مدفعية", "قذائف الهاون",
+    ]),
+    ("evacuation", 0.55, [
+        "evacuation", "evacuated", "forced to flee", "mass displacement",
+        "ordered to leave", "emergency evacuation", "civilians evacuating",
+        "إخلاء", "أُجبروا على الفرار", "نزوح جماعي", "أُمروا بالمغادرة",
+        "إخلاء فوري", "إخلاء قسري", "هجرة قسرية",
+    ]),
+    ("cyber", 0.65, [
+        "cyber attack", "cyberattack", "hacked", "hacking", "ddos", "malware",
+        "ransomware", "power grid attack", "infrastructure attack", "data breach",
+        "هجوم إلكتروني", "اختراق إلكتروني", "قرصنة", "هجوم سيبراني",
+        "فيروس", "برمجيات خبيثة",
+    ]),
 ]
 
 _IMPORTANCE_THRESHOLD = 0.50
@@ -280,6 +310,50 @@ def detect_propaganda(text: str) -> float:
         score += min(0.15, len(caps_words) * 0.03)
 
     return round(min(1.0, score), 3)
+
+
+def compute_escalation_level(
+    importance_score: float,
+    confidence: float,
+    confirmation_count: int,
+    confidence_level: str,
+    threat_tags: str = "",
+) -> str:
+    """
+    Compute operational escalation level from multiple intelligence signals.
+
+    critical — mass-casualty / verified multi-source high-threat event
+    high     — confirmed important event OR high-confidence strike/attack
+    medium   — any notable event with some corroboration
+    low      — default; routine or unconfirmed
+    """
+    tags = {t.strip() for t in threat_tags.split(",") if t.strip()}
+    high_threat = {"rockets", "airstrike", "casualties", "infiltration", "artillery", "interception", "cyber"}
+    has_high_threat = bool(tags & high_threat)
+
+    # CRITICAL
+    if importance_score >= 0.90:
+        return "critical"
+    if confidence_level == "verified" and importance_score >= 0.65 and has_high_threat:
+        return "critical"
+    if confirmation_count >= 2 and importance_score >= 0.75:
+        return "critical"
+
+    # HIGH
+    if importance_score >= 0.60 and confidence_level in ("high", "verified"):
+        return "high"
+    if importance_score >= 0.70 and confidence >= 0.65:
+        return "high"
+    if confirmation_count >= 1 and importance_score >= 0.50:
+        return "high"
+
+    # MEDIUM
+    if importance_score >= 0.40:
+        return "medium"
+    if confidence_level in ("medium", "high", "verified") and importance_score >= 0.20:
+        return "medium"
+
+    return "low"
 
 
 def detect_text_has_media_keywords(text: str) -> bool:

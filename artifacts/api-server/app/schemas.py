@@ -120,6 +120,7 @@ class EventResponse(BaseModel):
     has_media: bool = False
     propaganda_score: float = 0.0
     confidence_level: str = "low"
+    escalation_level: str = "low"
     event_date: Optional[datetime] = None
     scraped_at: datetime
     created_at: datetime
@@ -197,6 +198,74 @@ class HealthStatus(BaseModel):
 
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
+
+# ── Intelligence patterns ──────────────────────────────────────────────────────
+
+class PatternAlert(BaseModel):
+    type: str
+    severity: str
+    description: str
+    location_hint: Optional[str] = None
+    event_ids: List[int] = []
+    detected_at: str
+    expires_at: str
+
+
+class PatternListResponse(BaseModel):
+    patterns: List[PatternAlert]
+    total: int
+
+
+# ── Geographic intelligence ────────────────────────────────────────────────────
+
+class GeoCluster(BaseModel):
+    grid_lat: float
+    grid_lng: float
+    center_lat: float
+    center_lng: float
+    radius_km: float
+    event_count: int
+    dominant_side: str
+    last_event_at: Optional[str] = None
+    threat_level: str
+    event_ids: List[int] = []
+    is_hotzone: bool
+
+
+class GeoClusterListResponse(BaseModel):
+    clusters: List[GeoCluster]
+    total: int
+    hotzones: int
+
+
+# ── Source statistics ──────────────────────────────────────────────────────────
+
+class ReliabilityPoint(BaseModel):
+    date: str
+    avg_confidence: float
+    avg_propaganda: float
+    event_count: int
+
+
+class HourlyActivity(BaseModel):
+    hour: int   # 0-23
+    count: int
+
+
+class SourceStats(BaseModel):
+    source_id: int
+    source_name: str
+    source_type: str
+    total_events: int
+    avg_confidence: float
+    avg_propaganda: float
+    avg_importance: float
+    important_events: int
+    reliability_score: float
+    reliability_history: List[ReliabilityPoint]  # last 14 days
+    hourly_activity: List[HourlyActivity]         # activity by hour of day
+    first_report_speed_seconds: Optional[float] = None  # avg time to be first reporter
+
 
 class TelegramChannelInput(BaseModel):
     username: str

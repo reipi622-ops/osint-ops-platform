@@ -54,6 +54,7 @@ class Event(Base):
     has_media = Column(Boolean, default=False)                # had photo/video evidence
     propaganda_score = Column(Float, default=0.0)            # 0=neutral, 1=heavy propaganda
     confidence_level = Column(String, default="low", index=True)  # low/medium/high/verified
+    escalation_level = Column(String, default="low", index=True)  # low/medium/high/critical
 
     event_date = Column(DateTime, nullable=True)
     scraped_at = Column(DateTime, default=datetime.utcnow)

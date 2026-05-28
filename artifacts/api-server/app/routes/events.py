@@ -320,3 +320,68 @@ async def delete_event(event_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Event not found")
     db.delete(event)
     db.commit()
+
+
+@router.get("/export/data")
+async def export_events(
+    fmt: str = Query("json", regex="^(json|csv)$"),
+    side: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    is_important: Optional[bool] = Query(None),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    limit: int = Query(1000, le=5000),
+    db: Session = Depends(get_db),
+):
+    """Export events as JSON or CSV. Up to 5000 rows."""
+    import csv
+    import io
+
+    if side and side not in _VALID_SIDES:
+        raise HTTPException(400, f"Invalid side. Must be one of: {', '.join(_VALID_SIDES)}")
+
+    query = db.query(models.Event).filter(models.Event.is_duplicate == False)
+    if side:
+        query = query.filter(models.Event.side == side)
+    if category:
+        query = query.filter(models.Event.category == category)
+    if is_important is True:
+        query = query.filter(models.Event.is_important == True)
+    if date_from:
+        query = query.filter(models.Event.created_at >= date_from)
+    if date_to:
+        query = query.filter(models.Event.created_at <= date_to)
+
+    items = query.order_by(models.Event.created_at.desc()).limit(limit).all()
+
+    if fmt == "csv":
+        cols = [
+            "id", "title_he", "category", "side", "importance_score",
+            "confidence_level", "escalation_level", "propaganda_score",
+            "location_name", "lat", "lng", "source_name",
+            "confirmation_count", "has_media", "created_at",
+        ]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+        writer.writeheader()
+        for ev in items:
+            row = {c: getattr(ev, c, None) for c in cols}
+            row["created_at"] = ev.created_at.isoformat() if ev.created_at else ""
+            writer.writerow(row)
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=events_export.csv"},
+        )
+
+    from app.schemas import EventResponse
+    from pydantic import TypeAdapter
+    ta = TypeAdapter(list[EventResponse])
+    data = ta.validate_python(items)
+    import json as _json
+    content = _json.dumps([d.model_dump(mode="json") for d in data], ensure_ascii=False, indent=2)
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=events_export.json"},
+    )
