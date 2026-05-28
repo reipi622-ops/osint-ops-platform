@@ -30,6 +30,18 @@ _pending_phone_hash: Optional[str] = None
 _handler_registered = False
 _active_usernames: set[str] = set()  # only approved+active channels; refreshed on changes
 
+# Captured once in init_client() — the uvicorn event loop — used in thread-safe broadcasts
+_main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+# Per-channel join status: username → {"joined": bool, "error": str|None, "polled_at": datetime|None}
+_channel_status: dict[str, dict] = {}
+
+# Last processed message ID per channel (for dedup in polling fallback)
+_channel_last_ids: dict[str, int] = {}
+
+# Background polling task handle
+_polling_task: Optional[asyncio.Task] = None
+
 _status: dict = {
     "configured": False,
     "connected": False,
@@ -39,6 +51,7 @@ _status: dict = {
     "channels_active": 0,
     "messages_processed": 0,
     "messages_rejected": 0,
+    "raw_updates_received": 0,
     "last_message_at": None,
     "error": None,
 }
@@ -47,7 +60,6 @@ _status: dict = {
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _normalize_username(raw: str) -> str:
-    """Strip @, https://t.me/, t.me/ from channel identifiers."""
     u = raw.strip()
     u = re.sub(r"^https?://t\.me/", "", u)
     u = re.sub(r"^t\.me/", "", u)
@@ -60,15 +72,10 @@ def _is_arabic(text: str) -> bool:
 
 
 def _is_public_broadcast(chat) -> bool:
-    """
-    Return True only if the chat entity is a public Telegram broadcast channel.
-    Rejects: private chats (User), groups (Chat), supergroups, private channels.
-    """
     try:
         from telethon.tl.types import Channel
     except ImportError:
         return False
-
     if not isinstance(chat, Channel):
         return False
     if not getattr(chat, "broadcast", False):
@@ -84,9 +91,18 @@ def get_status() -> dict:
     return dict(_status)
 
 
+def get_channel_status(username: str) -> dict:
+    """Return the in-memory join/poll status for a given channel username."""
+    norm = _normalize_username(username)
+    return _channel_status.get(norm, {"joined": False, "error": "not_initialized", "polled_at": None})
+
+
 async def init_client() -> None:
     """Called once from FastAPI lifespan. Safe to call even if not configured."""
-    global _client
+    global _client, _main_loop
+
+    # Capture the server event loop once — used for thread-safe SSE broadcasting
+    _main_loop = asyncio.get_running_loop()
 
     from app.config import TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH
 
@@ -121,7 +137,9 @@ async def init_client() -> None:
 
 
 async def disconnect_client() -> None:
-    global _client
+    global _client, _polling_task
+    if _polling_task and not _polling_task.done():
+        _polling_task.cancel()
     if _client and _client.is_connected():
         await _client.disconnect()
     _status["connected"] = False
@@ -130,7 +148,6 @@ async def disconnect_client() -> None:
 
 
 async def request_code(phone: str) -> str:
-    """Sends a Telegram login code to the given phone. Returns phone_code_hash."""
     global _pending_phone_hash
 
     if not _client or not _client.is_connected():
@@ -144,7 +161,6 @@ async def request_code(phone: str) -> str:
 
 
 async def verify_code(phone: str, code: str, password: Optional[str] = None) -> None:
-    """Completes sign-in with the received code (and optional 2FA password)."""
     global _pending_phone_hash
 
     if not _client:
@@ -187,11 +203,6 @@ async def logout() -> None:
 
 
 async def verify_public_channel(username: str) -> Optional[dict]:
-    """
-    Resolve a username via Telethon and confirm it is a public broadcast channel.
-    Returns {"id": int, "title": str} if valid, or None if not a public channel.
-    Never accesses private chats, contacts or dialogs.
-    """
     if not _client or not _client.is_connected():
         raise RuntimeError("Telegram client is not connected.")
 
@@ -218,7 +229,7 @@ async def verify_public_channel(username: str) -> Optional[dict]:
 
 
 async def refresh_active_channels() -> None:
-    """Reload approved+active channel usernames from DB into the in-memory whitelist."""
+    """Reload approved+active channel usernames from DB, join new channels, restart polling."""
     global _active_usernames
 
     def _load():
@@ -234,34 +245,174 @@ async def refresh_active_channels() -> None:
                 )
                 .all()
             )
-            return {_normalize_username(r.username) for r in rows}, len(rows)
+            return {_normalize_username(r.username) for r in rows}, len(rows), [
+                (_normalize_username(r.username), r.last_message_id) for r in rows
+            ]
         finally:
             db.close()
 
-    names, count = await asyncio.to_thread(_load)
+    names, count, rows_info = await asyncio.to_thread(_load)
+
+    new_channels = names - _active_usernames
     _active_usernames = names
     _status["channels_active"] = count
+
+    # Pre-populate last_message_id from DB for new channels (avoid reprocessing old msgs)
+    for uname, last_id in rows_info:
+        if uname not in _channel_last_ids and last_id:
+            _channel_last_ids[uname] = last_id
+
     logger.info(
         "Security: whitelist refreshed — %d approved+active channel(s): %s",
         count, sorted(names),
     )
 
+    # Join any newly-added channels so Telethon receives their live updates
+    if _client and _client.is_connected():
+        for uname in names:
+            await _join_channel(uname)
+
+
+# ── channel joining ───────────────────────────────────────────────────────────
+
+async def _join_channel(username: str) -> bool:
+    """
+    Join a public broadcast channel via JoinChannelRequest.
+    REQUIRED: Telethon's NewMessage event only fires for channels the account is a member of.
+    Idempotent — safe to call if already joined.
+    """
+    global _client, _channel_status
+    norm = _normalize_username(username)
+
+    if not _client or not _client.is_connected():
+        _channel_status[norm] = {"joined": False, "error": "client_not_connected", "polled_at": None}
+        return False
+
+    try:
+        from telethon.tl.functions.channels import JoinChannelRequest
+        await _client(JoinChannelRequest(username))
+        _channel_status[norm] = {"joined": True, "error": None, "polled_at": None}
+        logger.info("Telegram: joined @%s — will now receive live messages", username)
+        return True
+    except Exception as exc:
+        err = str(exc)[:120]
+        _channel_status[norm] = {"joined": False, "error": err, "polled_at": None}
+        logger.warning("Telegram: could not join @%s: %s", username, exc)
+        return False
+
+
+# ── polling fallback ──────────────────────────────────────────────────────────
+
+async def _poll_channel_once(username: str, limit: int = 10) -> int:
+    """
+    Fetch the latest `limit` messages from a channel and process any we haven't seen.
+    Used by both the polling loop (fallback) and the manual test-fetch endpoint.
+    Returns the count of newly processed messages.
+    """
+    global _client, _channel_last_ids, _channel_status
+
+    norm = _normalize_username(username)
+
+    if not _client or not _client.is_connected():
+        return 0
+
+    try:
+        entity = await _client.get_entity(username)
+        last_id = _channel_last_ids.get(norm, 0)
+
+        # get_messages returns newest-first; pass min_id to skip already-processed ones
+        msgs = await _client.get_messages(entity, limit=limit, min_id=last_id)
+
+        new_count = 0
+        for msg in reversed(list(msgs)):   # process oldest → newest
+            if not msg.message:
+                continue
+            if msg.id <= last_id:
+                continue
+            _channel_last_ids[norm] = max(_channel_last_ids.get(norm, 0), msg.id)
+            await asyncio.to_thread(
+                _process_message_sync, msg.message, username, entity.id, msg.id
+            )
+            new_count += 1
+
+        now = datetime.utcnow()
+        cs = _channel_status.get(norm, {"joined": False, "error": None})
+        cs["polled_at"] = now
+        _channel_status[norm] = cs
+
+        if new_count:
+            logger.info("Telegram: polled @%s — %d new message(s) fetched", username, new_count)
+        return new_count
+
+    except Exception as exc:
+        logger.error("Telegram: poll error @%s: %s", username, exc)
+        cs = _channel_status.get(norm, {"joined": False, "error": None, "polled_at": None})
+        cs["error"] = str(exc)[:120]
+        _channel_status[norm] = cs
+        return 0
+
+
+async def fetch_latest_messages(username: str, limit: int = 10) -> dict:
+    """
+    Public API used by the 'Test Fetch' button.
+    Resets the last-seen ID so we unconditionally re-fetch the most recent messages.
+    Returns {"fetched": int, "channel": str}.
+    """
+    norm = _normalize_username(username)
+    # Reset so we fetch regardless of previously seen IDs
+    _channel_last_ids.pop(norm, None)
+    fetched = await _poll_channel_once(username, limit=limit)
+    return {"fetched": fetched, "channel": username}
+
+
+async def _poll_loop() -> None:
+    """
+    Background task: poll every 30 s as a fallback in case live NewMessage events
+    are not firing (e.g. the account isn't receiving real-time MTProto updates).
+    """
+    logger.info("Telegram: polling fallback loop started (30 s interval)")
+    while True:
+        await asyncio.sleep(30)
+        if not _active_usernames:
+            continue
+        for username in list(_active_usernames):
+            try:
+                await _poll_channel_once(username, limit=5)
+            except Exception as exc:
+                logger.error("Telegram: poll loop error @%s: %s", username, exc)
+
 
 # ── monitoring ────────────────────────────────────────────────────────────────
 
 async def _start_monitoring() -> None:
-    global _handler_registered
+    global _handler_registered, _polling_task
 
     if not _client or not _client.is_connected():
         return
 
     if not _handler_registered:
         from telethon import events as tg_events
+
+        # Raw handler — logs every incoming MTProto update so we can diagnose
+        # whether the connection is receiving anything at all
+        @_client.on(tg_events.Raw)
+        async def _raw_handler(update):
+            _status["raw_updates_received"] += 1
+            logger.debug("Telegram: raw update #%d — %s", _status["raw_updates_received"], type(update).__name__)
+
+        # Primary handler — security-gated, whitelist-only
         _client.add_event_handler(_handle_message, tg_events.NewMessage)
+
         _handler_registered = True
         logger.info("Security: message handler registered (whitelist-only mode)")
 
     await refresh_active_channels()
+
+    # Start the polling fallback task (cancel old one first if it's running)
+    if _polling_task and not _polling_task.done():
+        _polling_task.cancel()
+    _polling_task = asyncio.create_task(_poll_loop())
+
     _status["monitoring"] = True
     logger.info("Telegram: monitoring started (%d approved channels)", _status["channels_active"])
 
@@ -274,9 +425,16 @@ async def _handle_message(event) -> None:
       1. Chat must be a public broadcast Channel (not a group, not a private chat, not a user DM)
       2. Chat must have a public username
       3. Username must be in the admin-approved whitelist
-    Messages failing any gate are dropped and counted.
     """
     global _active_usernames
+
+    # ── Raw log — always fires if the event is received ──────────────────────
+    chat_id_raw = getattr(event, "chat_id", "?")
+    logger.info(
+        "Telegram: NewMessage event received — chat_id=%s peer_id=%s",
+        chat_id_raw,
+        getattr(event, "peer_id", "?"),
+    )
 
     try:
         chat = await event.get_chat()
@@ -287,8 +445,8 @@ async def _handle_message(event) -> None:
         # ── Gate 1: must be a public broadcast channel ──────────────────────
         if not _is_public_broadcast(chat):
             _status["messages_rejected"] += 1
-            logger.debug(
-                "Security: dropped message — not a public broadcast channel "
+            logger.warning(
+                "Security: dropped — not a public broadcast channel "
                 "(type=%s, username=%s, broadcast=%s)",
                 chat_type,
                 chat_username or "<none>",
@@ -299,13 +457,15 @@ async def _handle_message(event) -> None:
         # ── Gate 2: must be in the approved whitelist ────────────────────────
         if not _active_usernames:
             _status["messages_rejected"] += 1
+            logger.warning("Security: dropped — whitelist is empty (no approved channels)")
             return
 
         normalized = _normalize_username(chat_username)
         if normalized not in _active_usernames:
             _status["messages_rejected"] += 1
-            logger.debug(
-                "Security: dropped message from @%s — not in approved whitelist", chat_username
+            logger.warning(
+                "Security: dropped message from @%s — not in approved whitelist %s",
+                chat_username, sorted(_active_usernames),
             )
             return
 
@@ -314,12 +474,18 @@ async def _handle_message(event) -> None:
         if not text.strip():
             return
 
+        msg_id = getattr(event.message, "id", 0)
         logger.info(
-            "Security: accepted message from approved public channel @%s (%d chars)",
-            chat_username, len(text),
+            "Security: ACCEPTED message from @%s msg_id=%s (%d chars)",
+            chat_username, msg_id, len(text),
         )
+
+        # Update last_message_id so polling doesn't reprocess it
+        norm = _normalize_username(chat_username)
+        _channel_last_ids[norm] = max(_channel_last_ids.get(norm, 0), msg_id)
+
         await asyncio.to_thread(
-            _process_message_sync, text, chat_username, chat_id, event.message.id
+            _process_message_sync, text, chat_username, chat_id, msg_id
         )
 
     except Exception as exc:
@@ -340,27 +506,23 @@ def _process_message_sync(
     from app.services.geolocator import extract_location
     from app.services.translator import translate_text
     from app.services.event_broadcaster import broadcaster
-    import asyncio
 
     db = SessionLocal()
     try:
-        # Deduplication
         event_hash = compute_hash(text, "")
         if db.query(models.Event).filter(models.Event.event_hash == event_hash).first():
+            logger.debug("Telegram: skipping duplicate msg_id=%s from @%s", message_id, channel_username)
             return
 
-        # Language detection + translation
         is_ar = _is_arabic(text)
         original_lang = "ar" if is_ar else "en"
         title_he = translate_text(text[:300], original_lang, "he") if is_ar else text[:300]
         desc_he = translate_text(text[300:1500], original_lang, "he") if (is_ar and len(text) > 300) else None
 
-        # Classification + side + geolocation
         category, confidence = classify_event(text, "")
         side, _side_conf = classify_side(text, "")
         location_name, lat, lng = extract_location(text)
 
-        # Find or create a Source record for this channel
         source_url = f"https://t.me/{channel_username}"
         source = db.query(models.Source).filter(models.Source.url == source_url).first()
         if not source:
@@ -398,7 +560,6 @@ def _process_message_sync(
         )
         db.add(ev)
 
-        # Update channel stats
         ch = (
             db.query(models.TelegramChannel)
             .filter(models.TelegramChannel.username.ilike(channel_username))
@@ -415,20 +576,22 @@ def _process_message_sync(
         db.commit()
         db.refresh(ev)
 
-        # Update in-memory stats
         _status["messages_processed"] += 1
         _status["last_message_at"] = now
 
-        # Broadcast to SSE clients
+        # Broadcast to SSE clients — use the captured main loop for thread safety
         from pydantic import TypeAdapter
         from app.schemas import EventResponse
         payload = TypeAdapter(EventResponse).validate_python(ev).model_dump(mode="json")
-        loop = asyncio.get_event_loop()
-        asyncio.run_coroutine_threadsafe(broadcaster.broadcast(payload), loop)
+
+        if _main_loop and not _main_loop.is_closed():
+            asyncio.run_coroutine_threadsafe(broadcaster.broadcast(payload), _main_loop)
+        else:
+            logger.warning("Telegram: _main_loop not available — SSE broadcast skipped")
 
         logger.info(
-            "Telegram: stored event id=%d category=%s from @%s",
-            ev.id, ev.category, channel_username,
+            "Telegram: stored event id=%d category=%s side=%s from @%s",
+            ev.id, ev.category, ev.side, channel_username,
         )
 
     except Exception as exc:

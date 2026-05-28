@@ -36,6 +36,8 @@ async def auth_status():
         monitoring=s["monitoring"],
         channels_active=s["channels_active"],
         messages_processed=s["messages_processed"],
+        messages_rejected=s.get("messages_rejected", 0),
+        raw_updates_received=s.get("raw_updates_received", 0),
         last_message_at=s["last_message_at"],
         error=s["error"],
     )
@@ -76,11 +78,22 @@ async def logout():
 
 @router.get("/channels", response_model=list[schemas.TelegramChannelResponse])
 async def list_channels(db: Session = Depends(get_db)):
-    return (
+    rows = (
         db.query(models.TelegramChannel)
         .order_by(models.TelegramChannel.created_at.desc())
         .all()
     )
+    results = []
+    for ch in rows:
+        r = schemas.TelegramChannelResponse.model_validate(ch)
+        raw_ls = telegram_monitor.get_channel_status(ch.username)
+        r.listener_status = schemas.ListenerStatus(**{
+            "joined": raw_ls.get("joined", False),
+            "error": raw_ls.get("error"),
+            "polled_at": raw_ls.get("polled_at"),
+        })
+        results.append(r)
+    return results
 
 
 @router.post("/channels", response_model=schemas.TelegramChannelResponse, status_code=201)
@@ -193,12 +206,26 @@ async def approve_channel(channel_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(ch)
 
+    # refresh_active_channels() also joins the channel so Telethon receives live events
     await telegram_monitor.refresh_active_channels()
+    # Immediately backfill the last 10 messages after joining
+    try:
+        await telegram_monitor.fetch_latest_messages(ch.username, limit=10)
+    except Exception as exc:
+        logger.warning("Could not backfill @%s after approval: %s", ch.username, exc)
+
     logger.info(
         "Security audit: channel @%s APPROVED for monitoring at %s",
         ch.username, ch.approved_at.isoformat(),
     )
-    return ch
+    r = schemas.TelegramChannelResponse.model_validate(ch)
+    raw_ls = telegram_monitor.get_channel_status(ch.username)
+    r.listener_status = schemas.ListenerStatus(**{
+        "joined": raw_ls.get("joined", False),
+        "error": raw_ls.get("error"),
+        "polled_at": raw_ls.get("polled_at"),
+    })
+    return r
 
 
 @router.patch("/channels/{channel_id}", response_model=schemas.TelegramChannelResponse)
@@ -230,6 +257,25 @@ async def update_channel(
     await telegram_monitor.refresh_active_channels()
     logger.info("Security audit: channel @%s updated: %s", ch.username, list(updates.keys()))
     return ch
+
+
+@router.post("/channels/{channel_id}/test-fetch")
+async def test_fetch_channel(channel_id: int, db: Session = Depends(get_db)):
+    """
+    Manually fetch the latest 10 messages from a channel and process any new ones.
+    Useful for testing whether the listener is working.
+    """
+    ch = db.query(models.TelegramChannel).filter(models.TelegramChannel.id == channel_id).first()
+    if not ch:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    if not telegram_monitor.get_status()["authorized"]:
+        raise HTTPException(status_code=503, detail="Telegram is not authorized")
+    try:
+        result = await telegram_monitor.fetch_latest_messages(ch.username, limit=10)
+        logger.info("Manual test fetch: @%s — %d messages fetched", ch.username, result["fetched"])
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.delete("/channels/{channel_id}", status_code=204)

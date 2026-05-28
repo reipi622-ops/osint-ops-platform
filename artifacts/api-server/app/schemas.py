@@ -145,6 +145,13 @@ class TelegramChannelUpdate(BaseModel):
     is_approved: Optional[bool] = None
 
 
+class ListenerStatus(BaseModel):
+    """In-memory join/polling status for a Telegram channel (not persisted to DB)."""
+    joined: bool = False
+    error: Optional[str] = None
+    polled_at: Optional[datetime] = None
+
+
 class TelegramChannelResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -159,6 +166,7 @@ class TelegramChannelResponse(BaseModel):
     messages_processed: int
     created_at: datetime
     last_activity_at: Optional[datetime] = None
+    listener_status: Optional[ListenerStatus] = None   # injected by route, not from DB
 
 
 class TelegramAuthStatus(BaseModel):
@@ -169,6 +177,8 @@ class TelegramAuthStatus(BaseModel):
     monitoring: bool
     channels_active: int
     messages_processed: int
+    messages_rejected: int = 0
+    raw_updates_received: int = 0
     last_message_at: Optional[datetime] = None
     error: Optional[str] = None
 

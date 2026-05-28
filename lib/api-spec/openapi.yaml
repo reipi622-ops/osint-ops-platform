@@ -399,6 +399,32 @@ paths:
         "422":
           description: Not a public broadcast channel
 
+  /telegram/channels/{channelId}/test-fetch:
+    post:
+      operationId: testFetchTelegramChannel
+      tags: [telegram]
+      summary: Manually fetch the latest 10 messages from a channel
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Fetch result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fetched: { type: integer }
+                  channel: { type: string }
+                required: [fetched, channel]
+        "404":
+          description: Not found
+        "503":
+          description: Telegram not authorized
+
   /telegram/channels/{channelId}:
     patch:
       operationId: updateTelegramChannel
@@ -613,6 +639,8 @@ components:
         monitoring: { type: boolean }
         channels_active: { type: integer }
         messages_processed: { type: integer }
+        messages_rejected: { type: integer, default: 0 }
+        raw_updates_received: { type: integer, default: 0 }
         last_message_at: { type: ["string", "null"], format: date-time }
         error: { type: ["string", "null"] }
       required: [configured, connected, authorized, monitoring, channels_active, messages_processed]
@@ -646,6 +674,14 @@ components:
         is_active: { type: boolean }
         is_approved: { type: boolean }
 
+    ListenerStatus:
+      type: object
+      properties:
+        joined: { type: boolean }
+        error: { type: ["string", "null"] }
+        polled_at: { type: ["string", "null"], format: date-time }
+      required: [joined]
+
     TelegramChannelResponse:
       type: object
       properties:
@@ -661,4 +697,8 @@ components:
         messages_processed: { type: integer }
         created_at: { type: string, format: date-time }
         last_activity_at: { type: ["string", "null"], format: date-time }
+        listener_status:
+          oneOf:
+            - $ref: "#/components/schemas/ListenerStatus"
+            - type: "null"
       required: [id, username, is_active, is_approved, is_public_verified, last_message_id, messages_processed, created_at]

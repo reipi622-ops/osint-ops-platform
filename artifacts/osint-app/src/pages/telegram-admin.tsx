@@ -10,6 +10,7 @@ import {
   useUpdateTelegramChannel,
   useDeleteTelegramChannel,
   useApproveTelegramChannel,
+  useTestFetchTelegramChannel,
   getListTelegramChannelsQueryKey,
   getGetTelegramAuthStatusQueryKey,
 } from "@workspace/api-client-react";
@@ -21,47 +22,48 @@ import { Badge } from "@/components/ui/badge";
 import {
   Activity, ShieldAlert, Phone, KeyRound, LogOut, Plus, Trash2, Radio,
   CheckCircle2, MessageSquare, Clock, ShieldCheck, ShieldX, Lock, Eye,
+  Download, Wifi, WifiOff, AlertTriangle,
 } from "lucide-react";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import { useToast } from "@/hooks/use-toast";
-import { CATEGORY_COLORS } from "@/lib/constants";
+import { CATEGORY_COLORS, SIDE_COLORS, SIDE_LABELS } from "@/lib/constants";
 
 export default function TelegramAdmin() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const { data: authStatus, isLoading: authLoading } = useGetTelegramAuthStatus({
-    query: { queryKey: getGetTelegramAuthStatusQueryKey(), refetchInterval: 10000 },
+    query: { queryKey: getGetTelegramAuthStatusQueryKey(), refetchInterval: 5000 },
   });
 
   const { data: channels, isLoading: channelsLoading } = useListTelegramChannels({
-    query: { queryKey: getListTelegramChannelsQueryKey(), refetchInterval: 15000 },
+    query: { queryKey: getListTelegramChannelsQueryKey(), refetchInterval: 10000 },
   });
 
-  const requestCode = useTelegramRequestCode();
-  const verifyCode  = useTelegramVerifyCode();
-  const logout      = useTelegramLogout();
-
-  const addChannel    = useAddTelegramChannel();
-  const patchChannel  = useUpdateTelegramChannel();
+  const requestCode  = useTelegramRequestCode();
+  const verifyCode   = useTelegramVerifyCode();
+  const logout       = useTelegramLogout();
+  const addChannel   = useAddTelegramChannel();
+  const patchChannel = useUpdateTelegramChannel();
   const deleteChannel = useDeleteTelegramChannel();
   const approveChannel = useApproveTelegramChannel();
+  const testFetch    = useTestFetchTelegramChannel();
 
   const [phone, setPhone]       = useState("");
   const [code, setCode]         = useState("");
   const [password, setPassword] = useState("");
   const [step, setStep]         = useState<1 | 2 | 3>(1);
-
   const [newUsername, setNewUsername] = useState("");
   const [newTitle, setNewTitle]       = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
+  const [fetchingId, setFetchingId]   = useState<number | null>(null);
 
-  const { events, status: liveStatus } = useLiveEvents(20);
+  const { events, status: liveStatus } = useLiveEvents(30);
 
   const invalidateChannels = () =>
     queryClient.invalidateQueries({ queryKey: getListTelegramChannelsQueryKey() });
 
-  // ── auth handlers ────────────────────────────────────────────────────────
+  // ── auth handlers ──────────────────────────────────────────────────────────
   const handleRequestCode = (e: React.FormEvent) => {
     e.preventDefault();
     if (!phone.startsWith("+")) {
@@ -72,7 +74,8 @@ export default function TelegramAdmin() {
       { data: { phone } },
       {
         onSuccess: () => { setStep(3); toast({ title: "Code Sent", description: "Check your Telegram app." }); },
-        onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message || "Failed to request code" }),
+        onError: (err: any) =>
+          toast({ variant: "destructive", title: "Error", description: err.message || "Failed to request code" }),
       },
     );
   };
@@ -87,7 +90,7 @@ export default function TelegramAdmin() {
           toast({ title: "Authorized", description: "Successfully connected to Telegram." });
         },
         onError: (err: any) =>
-          toast({ variant: "destructive", title: "Verification Failed", description: err.message || "Invalid code or password" }),
+          toast({ variant: "destructive", title: "Verification Failed", description: err.message || "Invalid code" }),
       },
     );
   };
@@ -97,12 +100,12 @@ export default function TelegramAdmin() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetTelegramAuthStatusQueryKey() });
         setStep(1);
-        toast({ title: "Logged Out", description: "Disconnected from Telegram." });
+        toast({ title: "Logged Out" });
       },
     });
   };
 
-  // ── channel handlers ─────────────────────────────────────────────────────
+  // ── channel handlers ───────────────────────────────────────────────────────
   const handleAddChannel = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim()) return;
@@ -114,11 +117,11 @@ export default function TelegramAdmin() {
           setNewUsername(""); setNewTitle(""); setShowAddForm(false);
           toast({
             title: "Channel Added — Pending Approval",
-            description: `@${newUsername} was verified as a public channel. Click APPROVE to activate monitoring.`,
+            description: `@${newUsername} verified as public channel. Click APPROVE to activate.`,
           });
         },
         onError: (err: any) =>
-          toast({ variant: "destructive", title: "Rejected", description: err.message || "Could not add channel" }),
+          toast({ variant: "destructive", title: "Rejected", description: err.message || "Could not add" }),
       },
     );
   };
@@ -129,10 +132,13 @@ export default function TelegramAdmin() {
       {
         onSuccess: () => {
           invalidateChannels();
-          toast({ title: "Channel Approved", description: `@${username} is now in the active monitoring whitelist.` });
+          toast({
+            title: "Channel Approved & Joined",
+            description: `@${username} is now in the whitelist. Live monitoring + backfill started.`,
+          });
         },
         onError: (err: any) =>
-          toast({ variant: "destructive", title: "Approval Failed", description: err.message || "Could not approve channel" }),
+          toast({ variant: "destructive", title: "Approval Failed", description: err.message }),
       },
     );
   };
@@ -155,32 +161,67 @@ export default function TelegramAdmin() {
     );
   };
 
+  const handleTestFetch = (id: number, username: string) => {
+    setFetchingId(id);
+    testFetch.mutate(
+      { channelId: id },
+      {
+        onSuccess: (data: any) => {
+          invalidateChannels();
+          queryClient.invalidateQueries({ queryKey: getGetTelegramAuthStatusQueryKey() });
+          toast({
+            title: `Test Fetch: @${username}`,
+            description: data.fetched > 0
+              ? `✓ Fetched ${data.fetched} new message(s) — check the Live Intercepts panel.`
+              : "No new messages since last poll. Channel is up to date.",
+          });
+        },
+        onError: (err: any) =>
+          toast({ variant: "destructive", title: "Fetch Failed", description: err.message }),
+        onSettled: () => setFetchingId(null),
+      },
+    );
+  };
+
   if (authLoading) {
     return <Layout><div className="p-6 h-full flex items-center justify-center"><Activity className="w-8 h-8 animate-spin text-primary" /></div></Layout>;
   }
 
   const isConfigured = authStatus?.configured;
   const isAuthorized = authStatus?.authorized;
-
   const pending  = (channels ?? []).filter(c => !c.is_approved);
   const approved = (channels ?? []).filter(c => c.is_approved);
 
   return (
     <Layout>
-      <div className="p-6 h-full flex flex-col gap-6 overflow-y-auto">
+      <div className="p-6 h-full flex flex-col gap-5 overflow-y-auto">
 
-        {/* ── Header ───────────────────────────────────────────────────── */}
-        <div className="flex justify-between items-center">
+        {/* ── Header ──────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap justify-between items-center gap-3">
           <h2 className="text-2xl font-bold font-mono tracking-tight uppercase flex items-center gap-2">
             <MessageSquare className="w-6 h-6" />
             Telegram Operations
           </h2>
           {isAuthorized && (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <Badge variant="outline" className="font-mono bg-green-500/10 text-green-500 border-green-500/20">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
-                AUTHORIZED: {authStatus.phone}
+                {authStatus.phone}
               </Badge>
+              {/* Live counter strip */}
+              <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground border border-border rounded px-2 py-1 bg-card">
+                <span title="Raw MTProto updates received (any type)">
+                  <span className="text-foreground font-bold">{authStatus.raw_updates_received ?? 0}</span> raw updates
+                </span>
+                <span className="text-border">|</span>
+                <span title="Messages that passed all security gates and were stored">
+                  <span className="text-green-400 font-bold">{authStatus.messages_processed ?? 0}</span> stored
+                </span>
+                <span className="text-border">|</span>
+                <span title="Messages dropped by security gates">
+                  <span className="text-amber-400 font-bold">{authStatus.messages_rejected ?? 0}</span> rejected
+                </span>
+              </div>
               <Button variant="ghost" size="sm" onClick={handleLogout}
                 className="font-mono text-xs text-muted-foreground hover:text-destructive">
                 <LogOut className="w-3 h-3 mr-1" /> DISCONNECT
@@ -189,7 +230,7 @@ export default function TelegramAdmin() {
           )}
         </div>
 
-        {/* ── Security Policy Banner ───────────────────────────────────── */}
+        {/* ── Security Policy Banner ──────────────────────────────────── */}
         <div className="flex items-start gap-3 bg-blue-500/8 border border-blue-500/20 rounded-md px-4 py-3 text-xs font-mono text-blue-400">
           <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0" />
           <div className="space-y-0.5">
@@ -200,7 +241,7 @@ export default function TelegramAdmin() {
           </div>
         </div>
 
-        {/* ── Auth Wizard ──────────────────────────────────────────────── */}
+        {/* ── Auth Wizard ─────────────────────────────────────────────── */}
         {!isAuthorized && (
           <Card className="border-border bg-card">
             <CardHeader className="border-b border-border pb-4">
@@ -218,8 +259,7 @@ export default function TelegramAdmin() {
                   <Activity className="w-5 h-5 text-amber-500 mt-0.5" />
                   <div>
                     <h4 className="font-mono text-sm font-bold text-amber-500 mb-1">NOT CONFIGURED</h4>
-                    <p className="text-sm text-amber-500/80 mb-2">TELEGRAM_API_ID and TELEGRAM_API_HASH environment variables are missing.</p>
-                    <p className="text-xs font-mono text-amber-500/60">Please refer to /TELEGRAM_SETUP.md for instructions on obtaining API credentials.</p>
+                    <p className="text-sm text-amber-500/80">TELEGRAM_API_ID and TELEGRAM_API_HASH environment variables are missing.</p>
                   </div>
                 </div>
               ) : (
@@ -233,7 +273,6 @@ export default function TelegramAdmin() {
                       }`}>{label}</span>
                     ))}
                   </div>
-
                   {step !== 3 ? (
                     <form onSubmit={handleRequestCode} className="space-y-4">
                       <div className="space-y-2">
@@ -286,8 +325,8 @@ export default function TelegramAdmin() {
               <h3 className="text-lg font-bold font-mono tracking-tight uppercase">Monitored Sources</h3>
               {authStatus?.monitoring && (
                 <p className="text-xs font-mono text-green-500 mt-1 flex items-center gap-1">
-                  <Activity className="w-3 h-3" />
-                  ACTIVE — {authStatus.channels_active} approved channel(s) · {authStatus.messages_processed || 0} messages processed
+                  <Activity className="w-3 h-3 animate-pulse" />
+                  ACTIVE — {authStatus.channels_active} channels · live listener + 30s polling fallback
                 </p>
               )}
             </div>
@@ -304,7 +343,7 @@ export default function TelegramAdmin() {
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start gap-2 text-xs font-mono text-amber-400/80">
                 <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                <span>Only public broadcast channels are accepted. The username will be verified against Telegram before saving. New channels require manual approval before monitoring begins.</span>
+                <span>Only public broadcast channels are accepted. Verified via Telegram before saving. New channels require manual approval.</span>
               </div>
               <form onSubmit={handleAddChannel} className="flex flex-col md:flex-row gap-3 items-end">
                 <div className="space-y-1.5 flex-1">
@@ -362,26 +401,20 @@ export default function TelegramAdmin() {
                       </div>
                     </div>
                     <p className="text-[10px] font-mono text-muted-foreground mb-3">
-                      Added {new Date(ch.created_at).toLocaleString()} · awaiting admin approval
+                      Added {new Date(ch.created_at).toLocaleString()} · awaiting approval
                     </p>
                     <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="flex-1 h-7 text-xs font-mono bg-green-600 hover:bg-green-700"
+                      <Button size="sm" className="flex-1 h-7 text-xs font-mono bg-green-600 hover:bg-green-700"
                         onClick={() => handleApprove(ch.id, ch.username)}
-                        disabled={approveChannel.isPending}
-                      >
+                        disabled={approveChannel.isPending}>
                         {approveChannel.isPending
                           ? <Activity className="w-3 h-3 mr-1 animate-spin" />
                           : <ShieldCheck className="w-3 h-3 mr-1" />}
                         APPROVE
                       </Button>
-                      <Button
-                        variant="outline" size="icon"
-                        className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive border-transparent"
+                      <Button variant="outline" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive border-transparent"
                         onClick={() => handleDelete(ch.id, ch.username)}
-                        disabled={deleteChannel.isPending}
-                      >
+                        disabled={deleteChannel.isPending}>
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
@@ -392,7 +425,7 @@ export default function TelegramAdmin() {
           </div>
         )}
 
-        {/* ── Approved & Active ────────────────────────────────────────── */}
+        {/* ── Approved & Active ─────────────────────────────────────────── */}
         <div className="space-y-3">
           <h4 className="text-xs font-bold font-mono tracking-widest text-green-400 uppercase flex items-center gap-2">
             <ShieldCheck className="w-4 h-4" /> Approved Whitelist ({approved.length})
@@ -400,7 +433,7 @@ export default function TelegramAdmin() {
 
           {channelsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map(i => <Card key={i} className="h-32 animate-pulse bg-card/50 border-border" />)}
+              {[1, 2, 3].map(i => <Card key={i} className="h-44 animate-pulse bg-card/50 border-border" />)}
             </div>
           ) : approved.length === 0 ? (
             <div className="border border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-center bg-card/20">
@@ -412,73 +445,129 @@ export default function TelegramAdmin() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {approved.map(ch => (
-                <Card key={ch.id} className={`bg-card border-border transition-colors ${
-                  ch.is_active ? "border-l-4 border-l-primary" : "border-l-4 border-l-muted opacity-60"
-                }`}>
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="truncate pr-2">
-                        <h4 className="font-bold text-sm truncate">{ch.title || ch.username}</h4>
-                        <p className="text-xs font-mono text-muted-foreground">@{ch.username}</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <Badge variant={ch.is_active ? "default" : "secondary"}
-                          className="text-[9px] font-mono px-1.5 py-0">
-                          {ch.is_active ? "ACTIVE" : "PAUSED"}
-                        </Badge>
-                        {ch.is_public_verified && (
-                          <Badge variant="outline"
-                            className="text-[9px] font-mono px-1.5 py-0 bg-green-500/10 text-green-400 border-green-500/20">
-                            <ShieldCheck className="w-2.5 h-2.5 mr-0.5" /> PUBLIC ✓
+              {approved.map(ch => {
+                const ls = ch.listener_status;
+                const isJoined   = ls?.joined === true;
+                const joinError  = ls?.error;
+                const isFetching = fetchingId === ch.id;
+
+                return (
+                  <Card key={ch.id} className={`bg-card border-border transition-colors ${
+                    ch.is_active ? "border-l-4 border-l-green-500" : "border-l-4 border-l-muted opacity-60"
+                  }`}>
+                    <CardContent className="p-4">
+                      {/* Title row */}
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="truncate pr-2">
+                          <h4 className="font-bold text-sm truncate">{ch.title || ch.username}</h4>
+                          <p className="text-xs font-mono text-muted-foreground">@{ch.username}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <Badge variant={ch.is_active ? "default" : "secondary"}
+                            className="text-[9px] font-mono px-1.5 py-0">
+                            {ch.is_active ? "ACTIVE" : "PAUSED"}
                           </Badge>
+                          {ch.is_public_verified && (
+                            <Badge variant="outline"
+                              className="text-[9px] font-mono px-1.5 py-0 bg-green-500/10 text-green-400 border-green-500/20">
+                              <ShieldCheck className="w-2.5 h-2.5 mr-0.5" /> PUBLIC ✓
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Listener status badge */}
+                      <div className="mb-3">
+                        {ls === null || ls === undefined ? (
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
+                            <WifiOff className="w-3 h-3" /> Not initialized
+                          </div>
+                        ) : isJoined ? (
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-green-400">
+                            <Wifi className="w-3 h-3 animate-pulse" />
+                            <span className="font-bold">JOINED</span>
+                            <span className="text-muted-foreground">— receiving live updates</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span className="font-bold">NOT JOINED</span>
+                            {joinError && (
+                              <span className="text-muted-foreground truncate max-w-[120px]" title={joinError}>
+                                {joinError}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {ls?.polled_at && (
+                          <div className="text-[9px] font-mono text-muted-foreground mt-0.5">
+                            Last poll: {new Date(ls.polled_at).toLocaleTimeString()}
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    <div className="space-y-1 mb-3">
-                      {ch.approved_at && (
+                      {/* Stats */}
+                      <div className="space-y-0.5 mb-3">
+                        {ch.approved_at && (
+                          <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-green-500" />
+                            Approved {new Date(ch.approved_at).toLocaleDateString()}
+                          </div>
+                        )}
                         <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-green-500" />
-                          Approved {new Date(ch.approved_at).toLocaleDateString()}
+                          <MessageSquare className="w-3 h-3" />
+                          {ch.messages_processed || 0} messages stored
                         </div>
-                      )}
-                      <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3" />
-                        {ch.messages_processed || 0} messages processed
+                        {ch.last_activity_at && (
+                          <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Last: {new Date(ch.last_activity_at).toLocaleTimeString()}
+                          </div>
+                        )}
                       </div>
-                      {ch.last_activity_at && (
-                        <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Last: {new Date(ch.last_activity_at).toLocaleTimeString()}
-                        </div>
-                      )}
-                    </div>
 
-                    <div className="flex gap-1 justify-end">
-                      <Button variant="outline" size="icon" className="h-7 w-7"
-                        onClick={() => handleToggleActive(ch.id, ch.is_active ?? false)}
-                        disabled={patchChannel.isPending}
-                        title={ch.is_active ? "Pause monitoring" : "Resume monitoring"}>
-                        <Activity className={`w-3 h-3 ${ch.is_active ? "text-primary" : "text-muted-foreground"}`} />
-                      </Button>
-                      <Button variant="outline" size="icon"
-                        className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive border-transparent"
-                        onClick={() => handleDelete(ch.id, ch.username)}
-                        disabled={deleteChannel.isPending}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                      {/* Action buttons */}
+                      <div className="flex gap-1">
+                        {/* Test Fetch */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 h-7 text-[10px] font-mono font-bold"
+                          onClick={() => handleTestFetch(ch.id, ch.username)}
+                          disabled={isFetching || !isAuthorized}
+                          title="Fetch latest 10 messages from this channel right now"
+                        >
+                          {isFetching
+                            ? <Activity className="w-3 h-3 mr-1 animate-spin" />
+                            : <Download className="w-3 h-3 mr-1" />}
+                          TEST FETCH
+                        </Button>
+                        {/* Toggle active */}
+                        <Button variant="outline" size="icon" className="h-7 w-7"
+                          onClick={() => handleToggleActive(ch.id, ch.is_active ?? false)}
+                          disabled={patchChannel.isPending}
+                          title={ch.is_active ? "Pause monitoring" : "Resume monitoring"}>
+                          <Activity className={`w-3 h-3 ${ch.is_active ? "text-primary" : "text-muted-foreground"}`} />
+                        </Button>
+                        {/* Delete */}
+                        <Button variant="outline" size="icon"
+                          className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive border-transparent"
+                          onClick={() => handleDelete(ch.id, ch.username)}
+                          disabled={deleteChannel.isPending}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* ── Live Feed ────────────────────────────────────────────────── */}
+        {/* ── Live Intercepts feed ─────────────────────────────────────── */}
         {isAuthorized && (
-          <div className="border border-border rounded-lg bg-card flex flex-col h-[300px]">
+          <div className="border border-border rounded-lg bg-card flex flex-col h-[320px]">
             <div className="p-3 border-b border-border bg-muted/20 flex justify-between items-center">
               <h3 className="font-mono text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                 <Radio className="w-4 h-4" />
@@ -488,7 +577,7 @@ export default function TelegramAdmin() {
                 {liveStatus === "connected" ? (
                   <span className="flex items-center text-green-500 font-bold">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse mr-1.5" />
-                    LIVE
+                    SSE CONNECTED
                   </span>
                 ) : liveStatus === "connecting" ? (
                   <span className="flex items-center text-yellow-500">
@@ -500,31 +589,40 @@ export default function TelegramAdmin() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {events.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-xs font-mono italic opacity-50">
-                  Waiting for incoming intercepts from approved channels...
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-xs font-mono">
+                  <Radio className="w-6 h-6 mb-2 opacity-30" />
+                  <p className="italic opacity-50">Waiting for intercepts from approved channels...</p>
+                  <p className="text-[10px] opacity-30 mt-1">Use "TEST FETCH" on a channel to trigger immediately</p>
                 </div>
               ) : (
                 events.map((event, i) => (
                   <div key={event.id || i}
-                    className="flex flex-col md:flex-row gap-2 md:gap-4 p-3 rounded bg-background border border-border/50 text-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="flex-none flex items-center gap-2 md:w-32 text-[10px] font-mono text-muted-foreground">
-                      <span>{new Date(event.created_at || Date.now()).toLocaleTimeString()}</span>
+                    className="flex gap-3 p-2.5 rounded bg-background border border-border/50 text-sm animate-in fade-in slide-in-from-bottom-1 duration-200">
+                    <div className="flex-none text-[10px] font-mono text-muted-foreground w-14 pt-0.5">
+                      {new Date(event.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2 mb-1.5">
-                        <Badge variant="outline"
-                          className={`text-[9px] font-mono uppercase px-1.5 py-0 ${CATEGORY_COLORS[event.category || "other"]} text-white border-transparent`}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Badge className={`text-[8px] font-mono uppercase px-1 py-0 border-none text-white ${SIDE_COLORS[event.side ?? "neutral"]}`}>
+                          {SIDE_LABELS[event.side ?? "neutral"]}
+                        </Badge>
+                        <Badge className={`text-[8px] font-mono uppercase px-1 py-0 border-none text-white ${CATEGORY_COLORS[event.category || "other"]}`}>
                           {event.category || "other"}
                         </Badge>
                         {event.location_name && (
-                          <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 text-muted-foreground">
-                            {event.location_name}
-                          </Badge>
+                          <span className="text-[9px] font-mono text-muted-foreground truncate">
+                            📍 {event.location_name}
+                          </span>
+                        )}
+                        {event.source_name && (
+                          <span className="text-[9px] font-mono text-muted-foreground ml-auto shrink-0">
+                            {event.source_name.replace("Telegram: ", "@")}
+                          </span>
                         )}
                       </div>
-                      <p className="font-medium text-foreground/90 truncate pr-4" dir="rtl">
+                      <p className="text-xs font-medium text-foreground/90 truncate" dir="rtl">
                         {event.title_he || event.title}
                       </p>
                     </div>
