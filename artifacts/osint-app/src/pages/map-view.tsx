@@ -1,8 +1,10 @@
 import { Layout } from "@/components/layout";
 import { EventDrawer } from "@/components/event-drawer";
-import { useListEvents } from "@workspace/api-client-react";
-import { useState, useMemo, useCallback } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
+import { EscalationBadge } from "@/components/escalation-badge";
+import { useListEvents, useListGeoHotzones, getListGeoHotzonesQueryKey } from "@workspace/api-client-react";
+import { useState, useMemo, useCallback, useRef, useEffect, Fragment } from "react";
+import { MapContainer, TileLayer, CircleMarker, Circle, Marker, Popup, useMap } from "react-leaflet";
+import { divIcon } from "leaflet";
 import {
   SIDE_HEX_COLORS, SIDE_COLORS, SIDE_LABELS_EN, SIDE_TEXT_COLORS,
   CATEGORY_COLORS, CATEGORIES, CONFIDENCE_LEVEL_COLORS, CONFIDENCE_LEVEL_LABELS,
@@ -13,12 +15,46 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Loader2, Radio, X, MapPin, Flame, ShieldAlert } from "lucide-react";
+import {
+  Search, Loader2, Radio, X, MapPin, Flame, ShieldAlert, Layers, AlertOctagon,
+} from "lucide-react";
 import { useLiveEvents } from "@/hooks/use-live-events";
-import type { EventResponse } from "@workspace/api-client-react";
+import type { EventResponse, HotZone } from "@workspace/api-client-react";
 
 const SIDES = ["red", "blue", "neutral"] as const;
 type Side = typeof SIDES[number];
+
+const THREAT_HEX: Record<string, string> = {
+  critical: "#ef4444",
+  high:     "#f97316",
+  medium:   "#eab308",
+  low:      "#64748b",
+};
+
+function escalationOpacity(level?: string | null): number {
+  switch (level) {
+    case "critical": return 1.0;
+    case "high":     return 0.80;
+    case "medium":   return 0.60;
+    default:         return 0.40;
+  }
+}
+
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.25);
+  } catch { /* ignore if AudioContext unavailable */ }
+}
 
 function LiveEventFlyTo({ event }: { event: EventResponse | null }) {
   const map = useMap();
@@ -28,25 +64,108 @@ function LiveEventFlyTo({ event }: { event: EventResponse | null }) {
   return null;
 }
 
-/** Map confidence_level → marker fill-opacity (verified = solid, low = faded) */
-function confidenceOpacity(level?: string | null): number {
-  switch (level) {
-    case "verified": return 0.95;
-    case "high":     return 0.80;
-    case "medium":   return 0.65;
-    default:         return 0.45;
-  }
+function HeatmapLayer({ events }: { events: EventResponse[] }) {
+  const map = useMap();
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const paint = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const size = map.getSize();
+    canvas.width = size.x;
+    canvas.height = size.y;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const ev of events) {
+      if (!ev.lat || !ev.lng) continue;
+      const pt = map.latLngToContainerPoint([ev.lat, ev.lng]);
+      const intensity = 0.2 + (ev.importance_score ?? 0) * 0.8;
+      const radius = 50;
+      const g = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius);
+      g.addColorStop(0,   `rgba(255,80,0,${(intensity * 0.55).toFixed(2)})`);
+      g.addColorStop(0.4, `rgba(255,160,0,${(intensity * 0.25).toFixed(2)})`);
+      g.addColorStop(1,   "rgba(255,80,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, [map, events]);
+
+  useEffect(() => {
+    const container = map.getContainer();
+    const canvas = document.createElement("canvas");
+    canvas.style.cssText =
+      "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:400;";
+    container.appendChild(canvas);
+    canvasRef.current = canvas;
+    return () => {
+      canvas.remove();
+      canvasRef.current = null;
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    paint();
+    map.on("move zoom", paint);
+    return () => {
+      map.off("move zoom", paint);
+    };
+  }, [map, paint]);
+
+  return null;
+}
+
+function HotZoneOverlay({ zones }: { zones: HotZone[] }) {
+  return (
+    <>
+      {zones.map((hz, i) => {
+        const color = THREAT_HEX[hz.threat_level] ?? "#64748b";
+        const isCritical = hz.threat_level === "critical";
+        return (
+          <Fragment key={i}>
+            <Circle
+              center={[hz.center_lat, hz.center_lng]}
+              radius={hz.radius_km * 1000}
+              pathOptions={{
+                color,
+                fillColor: color,
+                fillOpacity: 0.12,
+                weight: isCritical ? 2.5 : 1.5,
+                opacity: isCritical ? 0.85 : 0.55,
+                dashArray: isCritical ? "6 4" : undefined,
+              }}
+            />
+            <Marker
+              position={[hz.center_lat, hz.center_lng]}
+              interactive={false}
+              icon={divIcon({
+                className: "",
+                html: `<div class="hz-label hz-label--${hz.threat_level}" style="background:${color}22;border:1.5px solid ${color}99"><span>${hz.event_count}</span><small>${hz.dominant_side.toUpperCase()}</small></div>`,
+                iconSize: [52, 34],
+                iconAnchor: [26, 17],
+              })}
+            />
+          </Fragment>
+        );
+      })}
+    </>
+  );
 }
 
 export default function MapView() {
-  const [search, setSearch]             = useState("");
-  const [side, setSide]                 = useState<Side | "">("");
-  const [category, setCategory]         = useState<string>("");
-  const [onlyMapped, setOnlyMapped]     = useState(false);
+  const [search, setSearch]               = useState("");
+  const [side, setSide]                   = useState<Side | "">("");
+  const [category, setCategory]           = useState<string>("");
+  const [onlyMapped, setOnlyMapped]       = useState(false);
   const [onlyImportant, setOnlyImportant] = useState(false);
   const [hidePropaganda, setHidePropaganda] = useState(false);
-  const [drawerEvent, setDrawerEvent]   = useState<EventResponse | null>(null);
-  const [latestLive, setLatestLive]     = useState<EventResponse | null>(null);
+  const [heatmapActive, setHeatmapActive] = useState(false);
+  const [drawerEvent, setDrawerEvent]     = useState<EventResponse | null>(null);
+  const [latestLive, setLatestLive]       = useState<EventResponse | null>(null);
+  const audioUnlockedRef                  = useRef(false);
 
   const { data: eventsData, isLoading } = useListEvents({
     search: search || undefined,
@@ -58,7 +177,29 @@ export default function MapView() {
     limit: 300,
   });
 
-  const { events: liveEvents, status: liveStatus } = useLiveEvents(100);
+  const { data: hotzoneData } = useListGeoHotzones({
+    query: { queryKey: getListGeoHotzonesQueryKey(), refetchInterval: 30_000 },
+  });
+  const hotZones = hotzoneData?.clusters ?? [];
+
+  const { events: liveEvents, status: liveStatus, criticalEvent, dismissCritical } =
+    useLiveEvents(100);
+
+  useEffect(() => {
+    const unlock = () => { audioUnlockedRef.current = true; };
+    window.addEventListener("click", unlock, { once: true });
+    return () => window.removeEventListener("click", unlock);
+  }, []);
+
+  useEffect(() => {
+    if (criticalEvent && audioUnlockedRef.current) playBeep();
+  }, [criticalEvent]);
+
+  useEffect(() => {
+    if (!criticalEvent) return;
+    const t = setTimeout(dismissCritical, 12_000);
+    return () => clearTimeout(t);
+  }, [criticalEvent, dismissCritical]);
 
   const allEvents = useMemo(() => {
     const base = eventsData?.items ?? [];
@@ -124,13 +265,15 @@ export default function MapView() {
                   key={s}
                   onClick={() => setSide(s === side ? "" : s)}
                   className={`flex-1 py-1 rounded text-[9px] font-mono font-bold uppercase transition-colors ${
-                    side === s ? `${SIDE_COLORS[s]} text-white` : "bg-muted text-muted-foreground hover:text-foreground"
+                    side === s
+                      ? `${SIDE_COLORS[s]} text-white`
+                      : "bg-muted text-muted-foreground hover:text-foreground"
                   }`}
                 >{s === "neutral" ? "NTR" : s.toUpperCase()}</button>
               ))}
             </div>
 
-            {/* Category + geo + alerts + propaganda filter */}
+            {/* Category + toggles */}
             <div className="flex gap-1.5 flex-wrap">
               <Select value={category || "_all"} onValueChange={v => setCategory(v === "_all" ? "" : v)}>
                 <SelectTrigger className="flex-1 min-w-[90px] font-mono text-[10px] bg-background border-border h-7">
@@ -176,8 +319,22 @@ export default function MapView() {
               >
                 <ShieldAlert className="w-3 h-3 inline" />
               </button>
+              <button
+                onClick={() => setHeatmapActive(v => !v)}
+                title="Toggle heat map"
+                className={`px-2 rounded text-[9px] font-mono font-bold uppercase transition-colors border h-7 ${
+                  heatmapActive
+                    ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                    : "border-border text-muted-foreground hover:text-amber-400"
+                }`}
+              >
+                <Layers className="w-3 h-3 inline" />
+              </button>
               {hasFilters && (
-                <button onClick={clearFilters} className="px-2 rounded text-[9px] font-mono text-muted-foreground hover:text-destructive transition-colors border border-border h-7">
+                <button
+                  onClick={clearFilters}
+                  className="px-2 rounded text-[9px] font-mono text-muted-foreground hover:text-destructive transition-colors border border-border h-7"
+                >
                   <X className="w-3 h-3" />
                 </button>
               )}
@@ -238,6 +395,9 @@ export default function MapView() {
                           {CONFIDENCE_LEVEL_LABELS[event.confidence_level]}
                         </Badge>
                       )}
+                      {event.escalation_level && event.escalation_level !== "low" && (
+                        <EscalationBadge level={event.escalation_level} className="text-[8px] px-1 py-0" />
+                      )}
                       <span className="text-[9px] text-muted-foreground ml-auto whitespace-nowrap">
                         {new Date(event.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -275,6 +435,10 @@ export default function MapView() {
 
             <LiveEventFlyTo event={latestLive} />
 
+            {heatmapActive && <HeatmapLayer events={mappedEvents} />}
+
+            {hotZones.length > 0 && <HotZoneOverlay zones={hotZones} />}
+
             {mappedEvents.map((event) => {
               const color = markerColor(event);
               const isSelected = drawerEvent?.id === event.id;
@@ -282,7 +446,7 @@ export default function MapView() {
               const isImportant = !!event.is_important;
               const opacity = isSelected || isImportant
                 ? 0.95
-                : confidenceOpacity(event.confidence_level);
+                : escalationOpacity(event.escalation_level);
 
               return (
                 <CircleMarker
@@ -306,10 +470,8 @@ export default function MapView() {
                         <Badge className={`text-[9px] font-mono border-none text-white ${CATEGORY_COLORS[event.category]}`}>
                           {event.category}
                         </Badge>
-                        {event.confidence_level && event.confidence_level !== "low" && (
-                          <Badge className={`text-[9px] font-mono border-none text-white ${CONFIDENCE_LEVEL_COLORS[event.confidence_level] ?? "bg-slate-500"}`}>
-                            {CONFIDENCE_LEVEL_LABELS[event.confidence_level]}
-                          </Badge>
+                        {event.escalation_level && event.escalation_level !== "low" && (
+                          <EscalationBadge level={event.escalation_level} className="text-[9px]" />
                         )}
                         {isImportant && (
                           <Badge className="text-[9px] font-mono border-none bg-orange-500 text-white">⚠ ALERT</Badge>
@@ -343,7 +505,7 @@ export default function MapView() {
             })}
           </MapContainer>
 
-          {/* Legend overlay */}
+          {/* ── Legend ─────────────────────────────────────────────────── */}
           <div className="absolute bottom-6 left-4 z-[1000] bg-background/90 backdrop-blur border border-border rounded-md p-3 space-y-1.5">
             <p className="text-[9px] font-mono font-bold uppercase text-muted-foreground tracking-widest mb-2">Legend</p>
             {SIDES.map(s => (
@@ -356,16 +518,27 @@ export default function MapView() {
               <div className="w-3 h-3 rounded-full border-2 border-orange-500" style={{ background: "transparent" }} />
               <span className="text-[10px] font-mono text-orange-400">Alert</span>
             </div>
+            {hotZones.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full border border-red-500" style={{ background: "#ef444420" }} />
+                <span className="text-[10px] font-mono text-red-400">Hot Zone ({hotZones.length})</span>
+              </div>
+            )}
             <div className="border-t border-border pt-1.5 mt-0.5">
-              <p className="text-[9px] font-mono text-muted-foreground mb-1">Opacity = Intel Level</p>
+              <p className="text-[9px] font-mono text-muted-foreground mb-1">Opacity = Escalation</p>
               <div className="flex gap-1">
-                {(["low","medium","high","verified"] as const).map(l => (
+                {(["critical", "high", "medium", "low"] as const).map(l => (
                   <div
                     key={l}
                     className="w-4 h-4 rounded-sm"
-                    title={CONFIDENCE_LEVEL_LABELS[l]}
-                    style={{ background: "#3b82f6", opacity: confidenceOpacity(l) }}
+                    title={l.toUpperCase()}
+                    style={{ background: "#3b82f6", opacity: escalationOpacity(l) }}
                   />
+                ))}
+              </div>
+              <div className="flex gap-1 mt-0.5">
+                {(["C", "H", "M", "L"]).map(l => (
+                  <span key={l} className="text-[7px] font-mono text-muted-foreground w-4 text-center">{l}</span>
                 ))}
               </div>
             </div>
@@ -373,6 +546,39 @@ export default function MapView() {
         </div>
 
       </div>
+
+      {/* ── Critical Event Popup ────────────────────────────────────────── */}
+      {criticalEvent && (
+        <div className="fixed bottom-6 right-6 z-[2000] max-w-sm w-full animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-red-950 border-2 border-red-500 rounded-lg shadow-2xl overflow-hidden">
+            <div className="bg-red-600 px-3 py-1.5 flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-white flex items-center gap-1.5">
+                <AlertOctagon className="w-3.5 h-3.5 animate-pulse" />
+                CRITICAL ALERT
+              </span>
+              <button onClick={dismissCritical} className="text-white/80 hover:text-white ml-3 transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="p-3">
+              <p className="text-sm font-semibold text-white leading-snug mb-2" dir="rtl">
+                {criticalEvent.title_he || criticalEvent.title}
+              </p>
+              <div className="flex items-center gap-2 flex-wrap text-[9px] font-mono text-white/70">
+                {criticalEvent.location_name && (
+                  <span>📍 {criticalEvent.location_name}</span>
+                )}
+                {criticalEvent.source_name && (
+                  <span>📡 {criticalEvent.source_name}</span>
+                )}
+                <span className="ml-auto">
+                  {new Date(criticalEvent.created_at).toLocaleTimeString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Event detail drawer */}
       <EventDrawer event={drawerEvent} onClose={() => setDrawerEvent(null)} />

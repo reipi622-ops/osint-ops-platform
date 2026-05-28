@@ -352,3 +352,38 @@
     inset: -1px;
   }
 }
+
+/* ── Hot zone labels (Leaflet DivIcon) ───────────────────────────────────── */
+.hz-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(3px);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.hz-label small {
+  font-size: 7px;
+  opacity: 0.8;
+  letter-spacing: 0.06em;
+}
+.hz-label--critical {
+  animation: hz-pulse 1.4s ease-in-out infinite;
+}
+@keyframes hz-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.75);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+}

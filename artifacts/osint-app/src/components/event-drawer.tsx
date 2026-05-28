@@ -1,6 +1,7 @@
 import { X, MapPin, CheckCheck, Radio, Image, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { EscalationBadge } from "@/components/escalation-badge";
 import {
   SIDE_COLORS, SIDE_LABELS_EN, CATEGORY_COLORS, IMPORTANCE_TAG_LABELS,
   CONFIDENCE_LEVEL_COLORS, CONFIDENCE_LEVEL_LABELS, CONFIDENCE_LEVEL_TEXT_COLORS,
@@ -234,8 +235,14 @@ export function EventDrawer({ event, onClose }: EventDrawerProps) {
 
                   {/* Confidence level */}
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-muted-foreground uppercase">Level</span>
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase">Intel Level</span>
                     <ConfidenceLevelBadge level={event.confidence_level} />
+                  </div>
+
+                  {/* Escalation level */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase">Escalation</span>
+                    <EscalationBadge level={event.escalation_level} />
                   </div>
 
                   {/* Confirmation count */}

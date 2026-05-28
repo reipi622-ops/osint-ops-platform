@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { EventResponse } from '@workspace/api-client-react';
 
 export type LiveEventsStatus = 'connecting' | 'connected' | 'error';
@@ -6,6 +6,7 @@ export type LiveEventsStatus = 'connecting' | 'connected' | 'error';
 export function useLiveEvents(maxEvents = 50) {
   const [events, setEvents] = useState<EventResponse[]>([]);
   const [status, setStatus] = useState<LiveEventsStatus>('connecting');
+  const [criticalEvent, setCriticalEvent] = useState<EventResponse | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -15,14 +16,15 @@ export function useLiveEvents(maxEvents = 50) {
       const es = new EventSource('/api/events/stream');
       esRef.current = es;
 
-      // The server sends named SSE events — `event: connected`, `event: new_event`, `event: heartbeat`.
-      // es.onmessage only fires for *unnamed* events; we must use addEventListener for named ones.
       es.addEventListener('connected', () => setStatus('connected'));
 
       es.addEventListener('new_event', (e: MessageEvent) => {
         try {
           const ev: EventResponse = JSON.parse(e.data);
           setEvents(prev => [ev, ...prev].slice(0, maxEvents));
+          if (ev.escalation_level === 'critical') {
+            setCriticalEvent(ev);
+          }
         } catch {
           /* ignore malformed frames */
         }
@@ -45,5 +47,7 @@ export function useLiveEvents(maxEvents = 50) {
     };
   }, [maxEvents]);
 
-  return { events, status };
+  const dismissCritical = useCallback(() => setCriticalEvent(null), []);
+
+  return { events, status, criticalEvent, dismissCritical };
 }

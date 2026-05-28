@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout";
 import { EventDrawer } from "@/components/event-drawer";
+import { EscalationBadge } from "@/components/escalation-badge";
 import { useListEvents, useListSources } from "@workspace/api-client-react";
 import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
@@ -242,6 +243,7 @@ export default function EventsList() {
                     <TableHead className="font-mono text-xs">TITLE (HE)</TableHead>
                     <TableHead className="font-mono text-xs w-[130px]">LOCATION</TableHead>
                     <TableHead className="font-mono text-xs w-[100px]">INTEL LEVEL</TableHead>
+                    <TableHead className="font-mono text-xs w-[110px]">ESCALATION</TableHead>
                     <TableHead className="font-mono text-xs w-[120px]">CONFIDENCE</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -298,6 +300,9 @@ export default function EventsList() {
                         )}
                       </TableCell>
                       <TableCell>
+                        <EscalationBadge level={event.escalation_level} className="text-[9px]" />
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-2">
                           <Progress value={event.confidence * 100} className="h-1.5 w-14" />
                           <span className="text-[10px] font-mono text-muted-foreground">
@@ -309,7 +314,7 @@ export default function EventsList() {
                   ))}
                   {allEvents.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-10 text-muted-foreground font-mono text-sm">
+                      <TableCell colSpan={9} className="text-center py-10 text-muted-foreground font-mono text-sm">
                         No events match the current filters
                       </TableCell>
                     </TableRow>

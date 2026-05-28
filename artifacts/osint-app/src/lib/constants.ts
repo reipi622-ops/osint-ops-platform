@@ -103,6 +103,28 @@ export const CONFIDENCE_LEVEL_HEX: Record<string, string> = {
   verified: "#8b5cf6",
 };
 
+// ── Escalation Levels ──────────────────────────────────────────────────────────
+export const ESCALATION_LEVEL_LABELS: Record<string, string> = {
+  low:      "Low",
+  medium:   "Medium",
+  high:     "High",
+  critical: "Critical",
+};
+
+export const ESCALATION_LEVEL_COLORS: Record<string, string> = {
+  low:      "bg-slate-500",
+  medium:   "bg-yellow-500",
+  high:     "bg-orange-500",
+  critical: "bg-red-600",
+};
+
+export const ESCALATION_LEVEL_TEXT_COLORS: Record<string, string> = {
+  low:      "text-slate-400",
+  medium:   "text-yellow-400",
+  high:     "text-orange-400",
+  critical: "text-red-400",
+};
+
 export const IMPORTANCE_TAG_LABELS: Record<string, { label: string; icon: string }> = {
   rockets:           { label: "טילים/רקטות",       icon: "🚀" },
   uav:               { label: 'כטב"מ',              icon: "🛸" },
