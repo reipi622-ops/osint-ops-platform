@@ -146,6 +146,7 @@ def _process_entry(entry, source: models.Source, db) -> bool:
     db.flush()  # get event.id before commit
 
     # Register in pattern engine (non-blocking)
+    # Use dup_{event.id} so future cross-source confirmations share the same group key.
     try:
         from app.services.pattern_engine import register_event_for_patterns
         register_event_for_patterns(
@@ -153,7 +154,7 @@ def _process_entry(entry, source: models.Source, db) -> bool:
             side=side,
             importance_score=importance_score,
             source_name=source.name,
-            event_hash=event_hash,
+            event_hash=f"dup_{event.id}",
             location_hint=location_name,
         )
     except Exception as pe:

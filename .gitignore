@@ -47,3 +47,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Telegram session files (contain live auth credentials — never commit)
+*.session
+*.session-journal
+artifacts/api-server/data/*.session
+artifacts/api-server/data/*.session-journal

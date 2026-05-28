@@ -271,7 +271,7 @@ class SourceStats(BaseModel):
     reliability_history: List[ReliabilityPoint]  # last 14 days
     propaganda_trend: List[PropagandaTrend]       # last 14 days
     hourly_activity: List[HourlyActivity]         # activity by hour of day
-    first_report_speed_seconds: Optional[float] = None  # avg seconds between event_date and scrape
+    avg_first_report_seconds: Optional[float] = None  # avg seconds between event_date and scrape
 
 
 class TelegramChannelInput(BaseModel):

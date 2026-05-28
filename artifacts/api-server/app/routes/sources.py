@@ -161,7 +161,7 @@ async def get_source_stats(source_id: int, db: Session = Depends(get_db)):
             delta = (r.created_at - r.event_date).total_seconds()
             if 0 < delta < 86400 * 7:  # sanity bound: within 7 days
                 speed_deltas.append(delta)
-    first_report_speed = round(sum(speed_deltas) / len(speed_deltas), 1) if speed_deltas else None
+    avg_first_report = round(sum(speed_deltas) / len(speed_deltas), 1) if speed_deltas else None
 
     return schemas.SourceStats(
         source_id=source_id,
@@ -176,5 +176,5 @@ async def get_source_stats(source_id: int, db: Session = Depends(get_db)):
         reliability_history=history,
         propaganda_trend=propaganda_trend,
         hourly_activity=hourly_activity,
-        first_report_speed_seconds=first_report_speed,
+        avg_first_report_seconds=avg_first_report,
     )

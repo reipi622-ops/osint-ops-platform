@@ -651,6 +651,8 @@ def _process_message_sync(
         register_event(text, ev.id)
 
         # Register in pattern engine (non-blocking; errors must not break the pipeline)
+        # Use dup_{ev.id} as the group key so confirmations (which also use dup_{ev.id})
+        # fall into the same bucket for coordinated-report detection.
         try:
             from app.services.pattern_engine import register_event_for_patterns
             register_event_for_patterns(
@@ -658,7 +660,7 @@ def _process_message_sync(
                 side=side,
                 importance_score=importance_score,
                 source_name=f"@{channel_username}",
-                event_hash=event_hash,
+                event_hash=f"dup_{ev.id}",
                 location_hint=location_name,
             )
         except Exception as pe:
