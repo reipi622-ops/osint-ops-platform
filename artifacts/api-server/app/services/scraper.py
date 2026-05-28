@@ -143,6 +143,22 @@ def _process_entry(entry, source: models.Source, db) -> bool:
         event_date=event_date,
     )
     db.add(event)
+    db.flush()  # get event.id before commit
+
+    # Register in pattern engine (non-blocking)
+    try:
+        from app.services.pattern_engine import register_event_for_patterns
+        register_event_for_patterns(
+            event_id=event.id,
+            side=side,
+            importance_score=importance_score,
+            source_name=source.name,
+            event_hash=event_hash,
+            location_hint=location_name,
+        )
+    except Exception as pe:
+        logger.debug("Pattern engine registration skipped: %s", pe)
+
     return True
 
 

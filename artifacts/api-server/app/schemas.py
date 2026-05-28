@@ -252,6 +252,12 @@ class HourlyActivity(BaseModel):
     count: int
 
 
+class PropagandaTrend(BaseModel):
+    date: str
+    avg_propaganda: float
+    event_count: int
+
+
 class SourceStats(BaseModel):
     source_id: int
     source_name: str
@@ -263,8 +269,9 @@ class SourceStats(BaseModel):
     important_events: int
     reliability_score: float
     reliability_history: List[ReliabilityPoint]  # last 14 days
+    propaganda_trend: List[PropagandaTrend]       # last 14 days
     hourly_activity: List[HourlyActivity]         # activity by hour of day
-    first_report_speed_seconds: Optional[float] = None  # avg time to be first reporter
+    first_report_speed_seconds: Optional[float] = None  # avg seconds between event_date and scrape
 
 
 class TelegramChannelInput(BaseModel):

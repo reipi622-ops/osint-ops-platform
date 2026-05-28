@@ -82,6 +82,7 @@ async def get_source_stats(source_id: int, db: Session = Depends(get_db)):
             important_events=0,
             reliability_score=0.0,
             reliability_history=[],
+            propaganda_trend=[],
             hourly_activity=[schemas.HourlyActivity(hour=h, count=0) for h in range(24)],
         )
 
@@ -107,33 +108,60 @@ async def get_source_stats(source_id: int, db: Session = Depends(get_db)):
         3,
     )
 
-    # Daily reliability history — last 14 days
+    # Fetch event_date for speed computation
+    rows_full = base.with_entities(
+        models.Event.confidence,
+        models.Event.propaganda_score,
+        models.Event.importance_score,
+        models.Event.is_important,
+        models.Event.created_at,
+        models.Event.event_date,
+    ).all()
+
+    # Daily reliability + propaganda history — last 14 days
     now = datetime.utcnow()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     history = []
+    propaganda_trend = []
     for i in range(13, -1, -1):
         day = today - timedelta(days=i)
         day_end = day + timedelta(days=1)
-        day_rows = [r for r in rows if r.created_at and day <= r.created_at < day_end]
-        if day_rows:
-            day_conf = round(sum(float(r.confidence or 0) for r in day_rows) / len(day_rows), 3)
-            day_prop = round(sum(float(r.propaganda_score or 0) for r in day_rows) / len(day_rows), 3)
+        day_rows = [r for r in rows_full if r.created_at and day <= r.created_at < day_end]
+        n = len(day_rows)
+        if n:
+            day_conf = round(sum(float(r.confidence or 0) for r in day_rows) / n, 3)
+            day_prop = round(sum(float(r.propaganda_score or 0) for r in day_rows) / n, 3)
         else:
             day_conf = 0.0
             day_prop = 0.0
+        date_str = day.strftime("%Y-%m-%d")
         history.append(schemas.ReliabilityPoint(
-            date=day.strftime("%Y-%m-%d"),
+            date=date_str,
             avg_confidence=day_conf,
             avg_propaganda=day_prop,
-            event_count=len(day_rows),
+            event_count=n,
+        ))
+        propaganda_trend.append(schemas.PropagandaTrend(
+            date=date_str,
+            avg_propaganda=day_prop,
+            event_count=n,
         ))
 
     # Hourly activity distribution (hour of day 0-23)
     hourly: dict = {h: 0 for h in range(24)}
-    for r in rows:
+    for r in rows_full:
         if r.created_at:
             hourly[r.created_at.hour] += 1
     hourly_activity = [schemas.HourlyActivity(hour=h, count=hourly[h]) for h in range(24)]
+
+    # Average time between event_date and scrape (how fast the source reports)
+    speed_deltas = []
+    for r in rows_full:
+        if r.event_date and r.created_at and r.event_date < r.created_at:
+            delta = (r.created_at - r.event_date).total_seconds()
+            if 0 < delta < 86400 * 7:  # sanity bound: within 7 days
+                speed_deltas.append(delta)
+    first_report_speed = round(sum(speed_deltas) / len(speed_deltas), 1) if speed_deltas else None
 
     return schemas.SourceStats(
         source_id=source_id,
@@ -146,5 +174,7 @@ async def get_source_stats(source_id: int, db: Session = Depends(get_db)):
         important_events=imp_events,
         reliability_score=reliability_score,
         reliability_history=history,
+        propaganda_trend=propaganda_trend,
         hourly_activity=hourly_activity,
+        first_report_speed_seconds=first_report_speed,
     )

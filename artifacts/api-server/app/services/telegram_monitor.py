@@ -526,8 +526,21 @@ def _process_message_sync(
                 message_id, channel_username, near_dup_id,
             )
             credit_confirmation(near_dup_id, f"@{channel_username}")
-            # Also register in dedup window so future identical messages are caught
+            # Register in dedup window so future identical messages are caught
             register_event(text, near_dup_id)
+            # Feed pattern engine with this confirmation so coordinated detection can fire
+            try:
+                from app.services.pattern_engine import register_event_for_patterns
+                register_event_for_patterns(
+                    event_id=near_dup_id,
+                    side="neutral",        # side unknown here; use neutral as placeholder
+                    importance_score=0.5,  # placeholder — original score already in window
+                    source_name=f"@{channel_username}",
+                    event_hash=f"dup_{near_dup_id}",  # group key: all confirmations share this
+                    location_hint=None,
+                )
+            except Exception as pe:
+                logger.debug("Pattern engine near-dup registration skipped: %s", pe)
             return
 
         # ── Full classification pipeline ─────────────────────────────────────
