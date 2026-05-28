@@ -118,6 +118,12 @@ async def events_stream(request: Request):
     )
 
 
+@router.get("/stream/health")
+async def stream_health():
+    """Broadcaster health: active subscribers, queue depths, eviction counts."""
+    return broadcaster.health()
+
+
 @router.get("/alerts", response_model=schemas.EventListResponse)
 async def list_alerts(
     side: Optional[str] = Query(None),

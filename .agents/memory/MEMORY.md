@@ -4,3 +4,6 @@
 - [Backend intelligence pipeline](osint-intelligence-pipeline.md) — classifier→deduplicator→broadcaster; near-dup calls credit_confirmation() not silent drop; confidence_level is low/medium/high/verified
 - [Near-dup Jaccard threshold](osint-near-dup.md) — threshold 0.72; test strings must share ≥73% of word tokens; "airstrikes" vs "air strikes" are different tokens
 - [Codegen before typecheck](codegen-typecheck.md) — always run api-spec codegen before frontend typecheck; codegen also runs typecheck:libs in the same command
+- [SQLite WAL + pragma pattern](sqlite-wal-pragmas.md) — WAL mode + session pragmas set via SQLAlchemy connect event; raw sqlite3.connect() callers must set their own.
+- [Broadcaster health + eviction](broadcaster-health.md) — GET /api/events/stream/health; WARN_DEPTH at 75% queue (150/200); eviction + delivery counters; queue cap 200.
+- [SSE format](sse-format.md) — no `event:` line; `_sse_type` field inside JSON data; frontend uses `es.onmessage` not `es.addEventListener`.

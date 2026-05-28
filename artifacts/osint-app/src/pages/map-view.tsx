@@ -229,7 +229,13 @@ export default function MapView() {
     if (withLoc) setLatestLive(withLoc);
   }, [liveEvents]);
 
-  const mappedEvents = useMemo(() => allEvents.filter(e => e.lat && e.lng), [allEvents]);
+  // Cap rendered markers at 500 — above this Leaflet canvas repaints become
+  // visually indistinguishable and measurably slow on mobile GPUs.
+  const MAP_MARKER_CAP = 500;
+  const mappedEvents = useMemo(
+    () => allEvents.filter(e => e.lat && e.lng).slice(0, MAP_MARKER_CAP),
+    [allEvents],
+  );
 
   const markerColor = useCallback((event: EventResponse) => {
     return SIDE_HEX_COLORS[event.side ?? "neutral"] || SIDE_HEX_COLORS.neutral;
