@@ -40,9 +40,8 @@ function escalationOpacity(level?: string | null): number {
   }
 }
 
-function playBeep() {
+function playBeep(ctx: AudioContext) {
   try {
-    const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -165,7 +164,7 @@ export default function MapView() {
   const [heatmapActive, setHeatmapActive] = useState(false);
   const [drawerEvent, setDrawerEvent]     = useState<EventResponse | null>(null);
   const [latestLive, setLatestLive]       = useState<EventResponse | null>(null);
-  const audioUnlockedRef                  = useRef(false);
+  const audioCtxRef                       = useRef<AudioContext | null>(null);
 
   const { data: eventsData, isLoading } = useListEvents({
     search: search || undefined,
@@ -185,14 +184,23 @@ export default function MapView() {
   const { events: liveEvents, status: liveStatus, criticalEvent, dismissCritical } =
     useLiveEvents(100);
 
+  /* Create AudioContext on first user gesture so it starts in running state */
   useEffect(() => {
-    const unlock = () => { audioUnlockedRef.current = true; };
+    const unlock = () => {
+      if (!audioCtxRef.current) {
+        try { audioCtxRef.current = new AudioContext(); } catch { /* ignore */ }
+      } else if (audioCtxRef.current.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+    };
     window.addEventListener("click", unlock, { once: true });
     return () => window.removeEventListener("click", unlock);
   }, []);
 
   useEffect(() => {
-    if (criticalEvent && audioUnlockedRef.current) playBeep();
+    if (criticalEvent && audioCtxRef.current?.state === "running") {
+      playBeep(audioCtxRef.current);
+    }
   }, [criticalEvent]);
 
   useEffect(() => {
@@ -395,9 +403,7 @@ export default function MapView() {
                           {CONFIDENCE_LEVEL_LABELS[event.confidence_level]}
                         </Badge>
                       )}
-                      {event.escalation_level && event.escalation_level !== "low" && (
-                        <EscalationBadge level={event.escalation_level} className="text-[8px] px-1 py-0" />
-                      )}
+                      <EscalationBadge level={event.escalation_level} className="text-[8px] px-1 py-0" />
                       <span className="text-[9px] text-muted-foreground ml-auto whitespace-nowrap">
                         {new Date(event.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
