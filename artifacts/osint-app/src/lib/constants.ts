@@ -24,3 +24,36 @@ export const CATEGORY_HEX_COLORS: Record<string, string> = {
   accident: "#eab308",
   other: "#64748b",
 };
+
+// ── Side (Red / Blue / Neutral) ───────────────────────────────────────────────
+export const SIDE_LABELS: Record<string, string> = {
+  red: "Red Side",
+  blue: "Blue Side",
+  neutral: "Neutral",
+};
+
+export const SIDE_COLORS: Record<string, string> = {
+  red: "bg-red-600",
+  blue: "bg-blue-600",
+  neutral: "bg-slate-500",
+};
+
+export const SIDE_TEXT_COLORS: Record<string, string> = {
+  red: "text-red-400",
+  blue: "text-blue-400",
+  neutral: "text-slate-400",
+};
+
+export const SIDE_BORDER_COLORS: Record<string, string> = {
+  red: "border-red-500/40",
+  blue: "border-blue-500/40",
+  neutral: "border-slate-500/40",
+};
+
+export const SIDE_HEX_COLORS: Record<string, string> = {
+  red: "#dc2626",
+  blue: "#2563eb",
+  neutral: "#64748b",
+};
+
+export const CATEGORIES = ["military", "political", "humanitarian", "crime", "accident", "other"] as const;

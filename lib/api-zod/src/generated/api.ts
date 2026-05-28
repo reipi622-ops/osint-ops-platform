@@ -27,7 +27,10 @@ export const listEventsQueryOffsetDefault = 0;
 
 export const ListEventsQueryParams = zod.object({
   "category": zod.coerce.string().optional(),
+  "side": zod.enum(['red', 'blue', 'neutral']).optional(),
   "source_id": zod.coerce.number().optional(),
+  "source_name": zod.coerce.string().optional(),
+  "has_location": zod.coerce.boolean().optional(),
   "date_from": zod.date().optional(),
   "date_to": zod.date().optional(),
   "search": zod.coerce.string().optional(),
@@ -38,6 +41,8 @@ export const ListEventsQueryParams = zod.object({
   "offset": zod.coerce.number().default(listEventsQueryOffsetDefault)
 })
 
+export const listEventsResponseItemsItemSideDefault = `neutral`;
+
 export const ListEventsResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.number(),
@@ -46,6 +51,7 @@ export const ListEventsResponse = zod.object({
   "description": zod.string().nullish(),
   "description_he": zod.string().nullish(),
   "category": zod.string(),
+  "side": zod.enum(['red', 'blue', 'neutral']).default(listEventsResponseItemsItemSideDefault),
   "confidence": zod.number(),
   "source_id": zod.number().nullish(),
   "source_name": zod.string().nullish(),
@@ -123,6 +129,8 @@ export const GetEventParams = zod.object({
   "eventId": zod.coerce.number()
 })
 
+export const getEventResponseSideDefault = `neutral`;
+
 export const GetEventResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
@@ -130,6 +138,7 @@ export const GetEventResponse = zod.object({
   "description": zod.string().nullish(),
   "description_he": zod.string().nullish(),
   "category": zod.string(),
+  "side": zod.enum(['red', 'blue', 'neutral']).default(getEventResponseSideDefault),
   "confidence": zod.number(),
   "source_id": zod.number().nullish(),
   "source_name": zod.string().nullish(),
@@ -165,6 +174,8 @@ export const UpdateEventBody = zod.object({
   "location_name": zod.string().optional()
 })
 
+export const updateEventResponseSideDefault = `neutral`;
+
 export const UpdateEventResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
@@ -172,6 +183,7 @@ export const UpdateEventResponse = zod.object({
   "description": zod.string().nullish(),
   "description_he": zod.string().nullish(),
   "category": zod.string(),
+  "side": zod.enum(['red', 'blue', 'neutral']).default(updateEventResponseSideDefault),
   "confidence": zod.number(),
   "source_id": zod.number().nullish(),
   "source_name": zod.string().nullish(),

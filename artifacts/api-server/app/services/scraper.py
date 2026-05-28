@@ -7,7 +7,7 @@ import feedparser
 
 from app.database import SessionLocal
 from app import models, schemas
-from app.services.classifier import classify_event
+from app.services.classifier import classify_event, classify_side
 from app.services.deduplicator import compute_hash
 from app.services.geolocator import extract_location
 from app.services.translator import translate_text
@@ -82,6 +82,7 @@ def _process_entry(entry, source: models.Source, db) -> bool:
     desc_he = translate_text(desc_orig[:1000], original_lang, "he") if (is_ar and desc_orig) else desc_orig
 
     category, confidence = classify_event(title_orig, desc_orig)
+    side, _side_conf = classify_side(title_orig, desc_orig)
     location_name, lat, lng = extract_location(f"{title_orig} {desc_orig}")
 
     published = getattr(entry, "published_parsed", None)
@@ -93,6 +94,7 @@ def _process_entry(entry, source: models.Source, db) -> bool:
         description=desc_orig[:2000] or None,
         description_he=desc_he[:2000] if desc_he else None,
         category=category,
+        side=side,
         confidence=confidence,
         source_id=source.id,
         source_name=source.name,

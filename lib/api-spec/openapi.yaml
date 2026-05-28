@@ -42,9 +42,18 @@ paths:
         - name: category
           in: query
           schema: { type: string }
+        - name: side
+          in: query
+          schema: { type: string, enum: [red, blue, neutral] }
         - name: source_id
           in: query
           schema: { type: integer }
+        - name: source_name
+          in: query
+          schema: { type: string }
+        - name: has_location
+          in: query
+          schema: { type: boolean }
         - name: date_from
           in: query
           schema: { type: string, format: date-time }
@@ -447,6 +456,7 @@ components:
         description: { type: ["string", "null"] }
         description_he: { type: ["string", "null"] }
         category: { type: string }
+        side: { type: string, enum: [red, blue, neutral], default: neutral }
         confidence: { type: number }
         source_id: { type: ["integer", "null"] }
         source_name: { type: ["string", "null"] }
@@ -461,7 +471,7 @@ components:
         scraped_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
         event_date: { type: ["string", "null"], format: date-time }
-      required: [id, title, category, confidence, original_lang, event_hash, is_duplicate, scraped_at, created_at]
+      required: [id, title, category, side, confidence, original_lang, event_hash, is_duplicate, scraped_at, created_at]
 
     EventInput:
       type: object

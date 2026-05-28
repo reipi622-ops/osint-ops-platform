@@ -335,7 +335,7 @@ def _process_message_sync(
     """Synchronous pipeline: translate → classify → geolocate → store → broadcast."""
     from app.database import SessionLocal
     from app import models
-    from app.services.classifier import classify_event
+    from app.services.classifier import classify_event, classify_side
     from app.services.deduplicator import compute_hash
     from app.services.geolocator import extract_location
     from app.services.translator import translate_text
@@ -355,8 +355,9 @@ def _process_message_sync(
         title_he = translate_text(text[:300], original_lang, "he") if is_ar else text[:300]
         desc_he = translate_text(text[300:1500], original_lang, "he") if (is_ar and len(text) > 300) else None
 
-        # Classification + geolocation
+        # Classification + side + geolocation
         category, confidence = classify_event(text, "")
+        side, _side_conf = classify_side(text, "")
         location_name, lat, lng = extract_location(text)
 
         # Find or create a Source record for this channel
@@ -379,6 +380,7 @@ def _process_message_sync(
             description=text[:2000] if len(text) > 300 else None,
             description_he=desc_he,
             category=category,
+            side=side,
             confidence=confidence,
             source_id=source.id,
             source_name=source.name,

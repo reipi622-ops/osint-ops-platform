@@ -5,10 +5,14 @@
  * OSINT Platform API - collects and analyzes events from Arabic news sources
  * OpenAPI spec version: 1.0.0
  */
+import type { ListEventsSide } from './listEventsSide';
 
 export type ListEventsParams = {
 category?: string;
+side?: ListEventsSide;
 source_id?: number;
+source_name?: string;
+has_location?: boolean;
 date_from?: Date;
 date_to?: Date;
 search?: string;

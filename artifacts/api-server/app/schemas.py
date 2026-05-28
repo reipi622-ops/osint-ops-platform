@@ -35,6 +35,7 @@ class EventInput(BaseModel):
     description: Optional[str] = None
     description_he: Optional[str] = None
     category: str = "other"
+    side: str = "neutral"
     confidence: float = 0.5
     source_id: Optional[int] = None
     source_name: Optional[str] = None
@@ -53,6 +54,7 @@ class EventUpdate(BaseModel):
     description: Optional[str] = None
     description_he: Optional[str] = None
     category: Optional[str] = None
+    side: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
     location_name: Optional[str] = None
@@ -66,6 +68,7 @@ class EventResponse(BaseModel):
     description: Optional[str] = None
     description_he: Optional[str] = None
     category: str
+    side: str = "neutral"
     confidence: float
     source_id: Optional[int] = None
     source_name: Optional[str] = None

@@ -103,10 +103,13 @@ async def events_stream(request: Request):
 @router.get("", response_model=schemas.EventListResponse)
 async def list_events(
     category: Optional[str] = Query(None),
+    side: Optional[str] = Query(None),
     source_id: Optional[int] = Query(None),
+    source_name: Optional[str] = Query(None),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     search: Optional[str] = Query(None),
+    has_location: Optional[bool] = Query(None),
     lat: Optional[float] = Query(None),
     lng: Optional[float] = Query(None),
     radius_km: Optional[float] = Query(None),
@@ -118,6 +121,14 @@ async def list_events(
 
     if category:
         query = query.filter(models.Event.category == category)
+    if side:
+        query = query.filter(models.Event.side == side)
+    if source_name:
+        query = query.filter(models.Event.source_name.ilike(f"%{source_name}%"))
+    if has_location is True:
+        query = query.filter(models.Event.lat.isnot(None), models.Event.lng.isnot(None))
+    if has_location is False:
+        query = query.filter(or_(models.Event.lat.is_(None), models.Event.lng.is_(None)))
     if source_id:
         query = query.filter(models.Event.source_id == source_id)
     if date_from:

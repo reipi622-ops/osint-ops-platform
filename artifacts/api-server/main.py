@@ -18,24 +18,28 @@ logger = logging.getLogger(__name__)
 
 def _migrate_db() -> None:
     """Add new columns to existing tables without dropping data (SQLite-safe)."""
-    migrations = [
-        "ALTER TABLE telegram_channels ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE telegram_channels ADD COLUMN approved_at DATETIME",
-        "ALTER TABLE telegram_channels ADD COLUMN is_public_verified INTEGER NOT NULL DEFAULT 0",
-    ]
+    table_migrations: dict[str, list[str]] = {
+        "telegram_channels": [
+            "ALTER TABLE telegram_channels ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE telegram_channels ADD COLUMN approved_at DATETIME",
+            "ALTER TABLE telegram_channels ADD COLUMN is_public_verified INTEGER NOT NULL DEFAULT 0",
+        ],
+        "events": [
+            "ALTER TABLE events ADD COLUMN side TEXT NOT NULL DEFAULT 'neutral'",
+        ],
+    }
     with engine.connect() as conn:
-        existing = {
-            row[1]
-            for row in conn.execute(
-                sa_text("PRAGMA table_info(telegram_channels)")
-            )
-        }
-        for stmt in migrations:
-            col = stmt.split("ADD COLUMN")[1].strip().split()[0]
-            if col not in existing:
-                conn.execute(sa_text(stmt))
-                conn.commit()
-                logger.info("DB migration: added column %s", col)
+        for table, stmts in table_migrations.items():
+            existing = {
+                row[1]
+                for row in conn.execute(sa_text(f"PRAGMA table_info({table})"))
+            }
+            for stmt in stmts:
+                col = stmt.split("ADD COLUMN")[1].strip().split()[0]
+                if col not in existing:
+                    conn.execute(sa_text(stmt))
+                    conn.commit()
+                    logger.info("DB migration: %s.%s added", table, col)
 
 
 @asynccontextmanager

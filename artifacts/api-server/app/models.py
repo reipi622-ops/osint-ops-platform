@@ -38,6 +38,7 @@ class Event(Base):
     lng = Column(Float, nullable=True)
 
     original_lang = Column(String, default="ar")
+    side = Column(String, default="neutral", index=True)  # red | blue | neutral
     raw_text = Column(Text, nullable=True)
     event_hash = Column(String, unique=True, index=True)
     is_duplicate = Column(Boolean, default=False)

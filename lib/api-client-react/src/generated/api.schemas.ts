@@ -11,6 +11,15 @@ export interface HealthStatus {
   database?: string;
 }
 
+export type EventResponseSide = typeof EventResponseSide[keyof typeof EventResponseSide];
+
+
+export const EventResponseSide = {
+  red: 'red',
+  blue: 'blue',
+  neutral: 'neutral',
+} as const;
+
 export interface EventResponse {
   id: number;
   title: string;
@@ -21,6 +30,7 @@ export interface EventResponse {
   /** @nullable */
   description_he?: string | null;
   category: string;
+  side: EventResponseSide;
   confidence: number;
   /** @nullable */
   source_id?: number | null;
@@ -202,7 +212,10 @@ export interface TelegramChannelResponse {
 
 export type ListEventsParams = {
 category?: string;
+side?: ListEventsSide;
 source_id?: number;
+source_name?: string;
+has_location?: boolean;
 date_from?: string;
 date_to?: string;
 search?: string;
@@ -212,6 +225,15 @@ radius_km?: number;
 limit?: number;
 offset?: number;
 };
+
+export type ListEventsSide = typeof ListEventsSide[keyof typeof ListEventsSide];
+
+
+export const ListEventsSide = {
+  red: 'red',
+  blue: 'blue',
+  neutral: 'neutral',
+} as const;
 
 export type TelegramRequestCode200 = {
   message: string;
