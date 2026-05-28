@@ -195,7 +195,7 @@ export default function Dashboard() {
             ) : (
               <div>
                 {patterns.map((p, i) => (
-                  <PatternRow key={i} p={p} />
+                  <PatternRow key={`${p.type}-${p.detected_at}-${i}`} p={p} />
                 ))}
               </div>
             )}

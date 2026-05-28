@@ -125,9 +125,13 @@ export default function EventsList() {
 
   const handleExport = useCallback(async (format: "csv" | "json") => {
     const params = new URLSearchParams({ format, limit: "5000" });
-    if (side) params.set("side", side);
-    if (category) params.set("category", category);
-    if (onlyImportant) params.set("is_important", "true");
+    if (side)           params.set("side", side);
+    if (category)       params.set("category", category);
+    if (onlyImportant)  params.set("is_important", "true");
+    if (search)         params.set("search", search);
+    if (sourceName)     params.set("source_name", sourceName);
+    if (confLevel)      params.set("confidence_level", confLevel);
+    if (hidePropaganda) params.set("hide_propaganda", "true");
     try {
       const res = await fetch(`/api/events/export?${params}`);
       const blob = await res.blob();
@@ -140,7 +144,7 @@ export default function EventsList() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch { /* silent — browser will handle download errors */ }
-  }, [side, category, onlyImportant]);
+  }, [side, category, onlyImportant, search, sourceName, confLevel, hidePropaganda]);
 
   return (
     <Layout>
