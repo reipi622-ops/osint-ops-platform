@@ -682,7 +682,19 @@ def _process_message_sync(
         payload = TypeAdapter(EventResponse).validate_python(ev).model_dump(mode="json")
 
         if _main_loop and not _main_loop.is_closed():
-            asyncio.run_coroutine_threadsafe(broadcaster.broadcast(payload), _main_loop)
+            fut = asyncio.run_coroutine_threadsafe(broadcaster.broadcast(payload), _main_loop)
+            # Log scheduling success; errors surface via Future.exception() if needed
+            logger.info(
+                "Telegram: SSE broadcast scheduled (event_id=%d subscribers=%d)",
+                ev.id,
+                broadcaster.subscriber_count,
+            )
+            # Non-blocking callback to surface any broadcast error
+            def _on_broadcast_done(f: "asyncio.Future[None]") -> None:  # type: ignore[type-arg]
+                exc = f.exception()
+                if exc:
+                    logger.error("Telegram: SSE broadcast raised: %s", exc)
+            fut.add_done_callback(_on_broadcast_done)
         else:
             logger.warning("Telegram: _main_loop not available — SSE broadcast skipped")
 

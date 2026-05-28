@@ -26,15 +26,25 @@ class EventBroadcaster:
 
     async def broadcast(self, payload: dict) -> None:
         if not self._queues:
+            logger.debug("SSE broadcast: no subscribers, skipping")
             return
         dead: Set[asyncio.Queue] = set()
+        delivered = 0
         for q in self._queues:
             try:
                 q.put_nowait(payload)
+                delivered += 1
             except asyncio.QueueFull:
                 dead.add(q)
         for q in dead:
             self._queues.discard(q)
+        logger.info(
+            "SSE broadcast: delivered to %d/%d subscriber(s) (event_id=%s dropped=%d)",
+            delivered,
+            delivered + len(dead),
+            payload.get("id"),
+            len(dead),
+        )
 
     @property
     def subscriber_count(self) -> int:

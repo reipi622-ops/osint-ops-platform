@@ -13,6 +13,7 @@ import {
   useTestFetchTelegramChannel,
   getListTelegramChannelsQueryKey,
   getGetTelegramAuthStatusQueryKey,
+  getListEventsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -58,7 +59,7 @@ export default function TelegramAdmin() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [fetchingId, setFetchingId]   = useState<number | null>(null);
 
-  const { events, status: liveStatus } = useLiveEvents(30);
+  const { events, status: liveStatus, messageCount, lastEventAt } = useLiveEvents(30);
 
   const invalidateChannels = () =>
     queryClient.invalidateQueries({ queryKey: getListTelegramChannelsQueryKey() });
@@ -169,6 +170,7 @@ export default function TelegramAdmin() {
         onSuccess: (data: any) => {
           invalidateChannels();
           queryClient.invalidateQueries({ queryKey: getGetTelegramAuthStatusQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
           toast({
             title: `Test Fetch: @${username}`,
             description: data.fetched > 0
@@ -568,12 +570,13 @@ export default function TelegramAdmin() {
         {/* ── Live Intercepts feed ─────────────────────────────────────── */}
         {isAuthorized && (
           <div className="border border-border rounded-lg bg-card flex flex-col h-[320px]">
-            <div className="p-3 border-b border-border bg-muted/20 flex justify-between items-center">
+            <div className="p-3 border-b border-border bg-muted/20 flex flex-wrap justify-between items-center gap-2">
               <h3 className="font-mono text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                 <Radio className="w-4 h-4" />
                 Live Intercepts
               </h3>
-              <div className="flex items-center gap-2 text-[10px] font-mono">
+              <div className="flex items-center gap-3 text-[10px] font-mono">
+                {/* SSE status */}
                 {liveStatus === "connected" ? (
                   <span className="flex items-center text-green-500 font-bold">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse mr-1.5" />
@@ -584,7 +587,22 @@ export default function TelegramAdmin() {
                     <Activity className="w-3 h-3 mr-1 animate-spin" /> CONNECTING
                   </span>
                 ) : (
-                  <span className="text-destructive">RECONNECTING...</span>
+                  <span className="text-destructive flex items-center gap-1">
+                    <Wifi className="w-3 h-3" /> RECONNECTING...
+                  </span>
+                )}
+                {/* Debug counters — always visible so issues are obvious */}
+                <span className="text-border">|</span>
+                <span className="text-muted-foreground">
+                  <span className="text-foreground font-bold">{messageCount}</span> received
+                </span>
+                {lastEventAt && (
+                  <>
+                    <span className="text-border">|</span>
+                    <span className="text-muted-foreground">
+                      last: <span className="text-foreground">{lastEventAt.toLocaleTimeString()}</span>
+                    </span>
+                  </>
                 )}
               </div>
             </div>

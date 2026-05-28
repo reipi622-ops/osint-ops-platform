@@ -75,31 +75,46 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
 @router.get("/stream")
 async def events_stream(request: Request):
     """
-    Server-Sent Events stream. Clients receive a 'new_event' message for every
-    event processed by Telegram monitor or RSS scraper, plus a heartbeat every
-    20 s to keep the connection alive through proxies.
+    Server-Sent Events stream.
+    All frames use the default SSE event type (no 'event:' field) so that
+    every proxy forwards them unchanged; the message type is encoded inside
+    the JSON as '_sse_type'.  Heartbeat every 5 s keeps proxies from closing
+    idle connections.
     """
     q = broadcaster.subscribe()
+    logger.info("SSE: client connected (subscribers now %d)", broadcaster.subscriber_count)
 
     async def generate():
         try:
-            yield "event: connected\ndata: {}\n\n"
+            # Initial handshake — tell the client we're live
+            yield f"retry: 3000\ndata: {json.dumps({'_sse_type': 'connected'})}\n\n"
             while True:
                 if await request.is_disconnected():
+                    logger.info("SSE: client disconnected")
                     break
                 try:
-                    payload = await asyncio.wait_for(q.get(), timeout=20.0)
+                    payload = await asyncio.wait_for(q.get(), timeout=5.0)
+                    payload["_sse_type"] = "new_event"
                     data = json.dumps(payload, default=str)
-                    yield f"event: new_event\ndata: {data}\n\n"
+                    logger.info(
+                        "SSE: delivering new_event id=%s to client (queue depth was 1+)",
+                        payload.get("id"),
+                    )
+                    yield f"data: {data}\n\n"
                 except asyncio.TimeoutError:
-                    yield "event: heartbeat\ndata: {}\n\n"
+                    yield f"data: {json.dumps({'_sse_type': 'heartbeat'})}\n\n"
         finally:
             broadcaster.unsubscribe(q)
+            logger.info("SSE: client unsubscribed (subscribers now %d)", broadcaster.subscriber_count)
 
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 
