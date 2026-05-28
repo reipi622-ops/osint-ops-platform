@@ -1,16 +1,20 @@
 import { Layout } from "@/components/layout";
+import { SourceStatsDrawer } from "@/components/source-stats-drawer";
 import { useListSources, useGetScraperStatus, useTriggerScraper, getGetScraperStatusQueryKey } from "@workspace/api-client-react";
+import type { SourceResponse } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Play, RefreshCw, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Activity, Play, RefreshCw, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 export default function SourcesList() {
   const { data: sources, isLoading } = useListSources();
   const { data: status } = useGetScraperStatus({ query: { queryKey: getGetScraperStatusQueryKey(), refetchInterval: 3000 } });
   const triggerScraper = useTriggerScraper();
   const { toast } = useToast();
+  const [selectedSource, setSelectedSource] = useState<SourceResponse | null>(null);
 
   const handleTrigger = () => {
     triggerScraper.mutate(undefined, {
@@ -61,16 +65,23 @@ export default function SourcesList() {
               <Card key={i} className="bg-card border-border animate-pulse h-[140px]" />
             ))
           ) : sources?.map((source) => (
-            <Card key={source.id} className="bg-card border-border hover:border-primary/50 transition-colors">
+            <Card
+              key={source.id}
+              className="bg-card border-border hover:border-primary/50 transition-colors cursor-pointer group"
+              onClick={() => setSelectedSource(source)}
+            >
               <CardContent className="p-5">
                 <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-bold text-lg leading-none mb-1">{source.name}</h3>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-lg leading-none mb-1 truncate">{source.name}</h3>
                     <div className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{source.url}</div>
                   </div>
-                  <Badge variant={source.is_active ? "default" : "secondary"} className="font-mono text-[10px]">
-                    {source.is_active ? "ACTIVE" : "INACTIVE"}
-                  </Badge>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <Badge variant={source.is_active ? "default" : "secondary"} className="font-mono text-[10px]">
+                      {source.is_active ? "ACTIVE" : "INACTIVE"}
+                    </Badge>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 mt-6 border-t border-border pt-4">
@@ -88,6 +99,12 @@ export default function SourcesList() {
           ))}
         </div>
       </div>
+
+      <SourceStatsDrawer
+        sourceId={selectedSource?.id ?? null}
+        sourceName={selectedSource?.name}
+        onClose={() => setSelectedSource(null)}
+      />
     </Layout>
   );
 }

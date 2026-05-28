@@ -2,7 +2,7 @@ import { Layout } from "@/components/layout";
 import { EventDrawer } from "@/components/event-drawer";
 import { EscalationBadge } from "@/components/escalation-badge";
 import { useListEvents, useListSources } from "@workspace/api-client-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   CATEGORY_COLORS, SIDE_COLORS, SIDE_LABELS_EN, SIDE_HEX_COLORS, CATEGORIES,
   CONFIDENCE_LEVEL_COLORS, CONFIDENCE_LEVEL_LABELS,
 } from "@/lib/constants";
-import { Loader2, Search, X, Radio, Flame, ShieldAlert } from "lucide-react";
+import { Loader2, Search, X, Radio, Flame, ShieldAlert, Star, Download, Bookmark } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -26,6 +29,19 @@ type Side = typeof SIDES[number];
 const CONF_LEVELS = ["low", "medium", "high", "verified"] as const;
 type ConfLevel = typeof CONF_LEVELS[number];
 
+const BOOKMARK_KEY = "osint_bookmarks";
+
+function getStoredBookmarks(): Set<number> {
+  try {
+    const raw = localStorage.getItem(BOOKMARK_KEY);
+    return new Set(raw ? (JSON.parse(raw) as number[]) : []);
+  } catch { return new Set(); }
+}
+
+function saveBookmarks(set: Set<number>): void {
+  localStorage.setItem(BOOKMARK_KEY, JSON.stringify([...set]));
+}
+
 export default function EventsList() {
   const [search, setSearch]               = useState("");
   const [side, setSide]                   = useState<Side | "">("");
@@ -34,8 +50,10 @@ export default function EventsList() {
   const [onlyImportant, setOnlyImportant] = useState(false);
   const [confLevel, setConfLevel]         = useState<ConfLevel | "">("");
   const [hidePropaganda, setHidePropaganda] = useState(false);
+  const [showBookmarked, setShowBookmarked] = useState(false);
   const [page, setPage]                   = useState(0);
   const [drawerEvent, setDrawerEvent]     = useState<EventResponse | null>(null);
+  const [bookmarks, setBookmarks]         = useState<Set<number>>(getStoredBookmarks);
   const PAGE = 100;
 
   const { data: eventsData, isLoading } = useListEvents({
@@ -76,6 +94,11 @@ export default function EventsList() {
     return [...fresh, ...base];
   }, [eventsData, liveEvents, side, category, sourceName, search, onlyImportant, confLevel, hidePropaganda]);
 
+  const displayedEvents = useMemo(
+    () => showBookmarked ? allEvents.filter(e => bookmarks.has(e.id)) : allEvents,
+    [allEvents, showBookmarked, bookmarks],
+  );
+
   const hasFilters = side || category || sourceName || search || onlyImportant || confLevel || hidePropaganda;
 
   const clearFilters = () => {
@@ -89,6 +112,35 @@ export default function EventsList() {
     (eventsData?.items ?? []).forEach(e => e.source_name && names.add(e.source_name));
     return [...names].sort();
   }, [sourcesData, eventsData]);
+
+  const handleBookmark = useCallback((e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    setBookmarks(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      saveBookmarks(next);
+      return next;
+    });
+  }, []);
+
+  const handleExport = useCallback(async (format: "csv" | "json") => {
+    const params = new URLSearchParams({ format, limit: "5000" });
+    if (side) params.set("side", side);
+    if (category) params.set("category", category);
+    if (onlyImportant) params.set("is_important", "true");
+    try {
+      const res = await fetch(`/api/events/export?${params}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `osint_events_${new Date().toISOString().slice(0, 10)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* silent — browser will handle download errors */ }
+  }, [side, category, onlyImportant]);
 
   return (
     <Layout>
@@ -110,6 +162,23 @@ export default function EventsList() {
               </span>
             )}
           </div>
+          {/* Export */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="font-mono text-xs h-8 gap-1.5">
+                <Download className="w-3.5 h-3.5" />
+                EXPORT
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="font-mono text-xs cursor-pointer" onClick={() => handleExport("csv")}>
+                Download CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem className="font-mono text-xs cursor-pointer" onClick={() => handleExport("json")}>
+                Download JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* ── Filter Bar ──────────────────────────────────────────────── */}
@@ -218,6 +287,20 @@ export default function EventsList() {
             FILTER BIAS
           </button>
 
+          {/* Bookmarked toggle */}
+          <button
+            onClick={() => setShowBookmarked(v => !v)}
+            title="Show only bookmarked events"
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-[10px] font-mono font-bold uppercase border transition-colors ${
+              showBookmarked
+                ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-400"
+                : "border-border text-muted-foreground hover:text-yellow-400 hover:border-yellow-500/40"
+            }`}
+          >
+            <Bookmark className="w-3 h-3" />
+            BOOKMARKED {bookmarks.size > 0 && `(${bookmarks.size})`}
+          </button>
+
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="font-mono text-xs text-muted-foreground h-9">
               <X className="w-3.5 h-3.5 mr-1" /> Clear
@@ -237,6 +320,7 @@ export default function EventsList() {
                 <TableHeader className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
                   <TableRow>
                     <TableHead className="w-[28px] font-mono text-xs"></TableHead>
+                    <TableHead className="w-[32px] font-mono text-xs"></TableHead>
                     <TableHead className="w-[110px] font-mono text-xs">TIME</TableHead>
                     <TableHead className="font-mono text-xs w-[80px]">SIDE</TableHead>
                     <TableHead className="font-mono text-xs w-[120px]">CATEGORY</TableHead>
@@ -248,7 +332,7 @@ export default function EventsList() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allEvents.map((event: EventResponse) => (
+                  {displayedEvents.map((event: EventResponse) => (
                     <TableRow
                       key={event.id}
                       className="hover:bg-muted/40 cursor-pointer transition-colors border-border"
@@ -260,6 +344,16 @@ export default function EventsList() {
                         {event.is_important && (
                           <Flame className="w-3.5 h-3.5 text-orange-500 mx-auto" />
                         )}
+                      </TableCell>
+                      {/* Bookmark star */}
+                      <TableCell className="px-1 text-center">
+                        <button
+                          onClick={e => handleBookmark(e, event.id)}
+                          className={`transition-colors ${bookmarks.has(event.id) ? "text-yellow-400" : "text-muted-foreground/30 hover:text-yellow-400"}`}
+                          title={bookmarks.has(event.id) ? "Remove bookmark" : "Bookmark"}
+                        >
+                          <Star className={`w-3 h-3 ${bookmarks.has(event.id) ? "fill-yellow-400" : ""}`} />
+                        </button>
                       </TableCell>
                       <TableCell className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
                         {new Date(event.created_at).toLocaleString(undefined, {
@@ -312,10 +406,10 @@ export default function EventsList() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {allEvents.length === 0 && (
+                  {displayedEvents.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-10 text-muted-foreground font-mono text-sm">
-                        No events match the current filters
+                      <TableCell colSpan={10} className="text-center py-10 text-muted-foreground font-mono text-sm">
+                        {showBookmarked ? "No bookmarked events" : "No events match the current filters"}
                       </TableCell>
                     </TableRow>
                   )}
@@ -326,7 +420,7 @@ export default function EventsList() {
         </div>
 
         {/* ── Pagination ──────────────────────────────────────────────── */}
-        {eventsData && eventsData.total > PAGE && (
+        {eventsData && eventsData.total > PAGE && !showBookmarked && (
           <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
             <span>
               Showing {page * PAGE + 1}–{Math.min((page + 1) * PAGE, eventsData.total)} of {eventsData.total}

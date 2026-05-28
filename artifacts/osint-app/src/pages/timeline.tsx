@@ -1,10 +1,10 @@
 import { Layout } from "@/components/layout";
 import { useGetEventsTimeline, getGetEventsTimelineQueryKey } from "@workspace/api-client-react";
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Loader2, Clock } from "lucide-react";
+import { Loader2, Clock, Play, Pause, SkipBack } from "lucide-react";
 import { SIDE_CHART_COLORS, SIDE_LABELS_EN } from "@/lib/constants";
 
 const WINDOWS = [
@@ -16,6 +16,13 @@ const WINDOWS = [
 ] as const;
 
 type WindowHours = typeof WINDOWS[number]["value"];
+
+const SCRUB_WINDOW = 2;
+const SPEEDS = [
+  { label: "1×", ms: 2000 },
+  { label: "4×", ms: 500  },
+] as const;
+type SpeedIdx = 0 | 1;
 
 function formatHour(isoHour: string, windowHours: WindowHours): string {
   const d = new Date(isoHour);
@@ -56,6 +63,11 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 
 export default function TimelinePage() {
   const [window, setWindow] = useState<WindowHours>(24);
+  const [scrubMode, setScrubMode]   = useState(false);
+  const [scrubIdx, setScrubIdx]     = useState(0);
+  const [isPlaying, setIsPlaying]   = useState(false);
+  const [speedIdx, setSpeedIdx]     = useState<SpeedIdx>(0);
+  const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const timelineParams = { hours: window };
   const { data, isLoading } = useGetEventsTimeline(
@@ -64,16 +76,64 @@ export default function TimelinePage() {
   );
 
   const hours = data?.hours ?? [];
+  const maxScrub = Math.max(0, hours.length - SCRUB_WINDOW);
 
-  // Derive summary stats
-  const totalEvents = hours.reduce((s, h) => s + h.total, 0);
-  const busiest = hours.reduce(
+  /* Reset scrubber when window changes */
+  useEffect(() => {
+    setScrubMode(false);
+    setScrubIdx(0);
+    setIsPlaying(false);
+  }, [window]);
+
+  /* Stop play when reaching the end */
+  useEffect(() => {
+    if (scrubIdx >= maxScrub && isPlaying) {
+      setIsPlaying(false);
+    }
+  }, [scrubIdx, maxScrub, isPlaying]);
+
+  /* Play interval */
+  const stopPlay = useCallback(() => {
+    if (playRef.current) { clearInterval(playRef.current); playRef.current = null; }
+  }, []);
+
+  useEffect(() => {
+    if (isPlaying) {
+      const ms = SPEEDS[speedIdx].ms;
+      playRef.current = setInterval(() => {
+        setScrubIdx(prev => {
+          if (prev >= maxScrub) { setIsPlaying(false); return prev; }
+          return prev + 1;
+        });
+      }, ms);
+    } else {
+      stopPlay();
+    }
+    return stopPlay;
+  }, [isPlaying, speedIdx, maxScrub, stopPlay]);
+
+  /* Display slice */
+  const displayHours = scrubMode
+    ? hours.slice(scrubIdx, scrubIdx + SCRUB_WINDOW)
+    : hours;
+
+  /* Derive summary stats from full window (not scrubbed) */
+  const totalEvents  = hours.reduce((s, h) => s + h.total, 0);
+  const busiest      = hours.reduce(
     (best, h) => (h.total > best.total ? h : best),
     { hour: "", total: 0, red: 0, blue: 0, neutral: 0 },
   );
   const redTotal     = hours.reduce((s, h) => s + h.red, 0);
   const blueTotal    = hours.reduce((s, h) => s + h.blue, 0);
   const neutralTotal = hours.reduce((s, h) => s + h.neutral, 0);
+
+  /* Window label for scrubber */
+  const scrubStartLabel = hours[scrubIdx]
+    ? new Date(hours[scrubIdx].hour).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "";
+  const scrubEndLabel = hours[Math.min(scrubIdx + SCRUB_WINDOW - 1, hours.length - 1)]
+    ? new Date(hours[Math.min(scrubIdx + SCRUB_WINDOW - 1, hours.length - 1)].hour).toLocaleString([], { hour: "2-digit", minute: "2-digit" })
+    : "";
 
   return (
     <Layout>
@@ -139,7 +199,7 @@ export default function TimelinePage() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={hours}
+                data={displayHours}
                 margin={{ top: 4, right: 8, left: -16, bottom: 40 }}
                 barCategoryGap="20%"
               >
@@ -154,7 +214,7 @@ export default function TimelinePage() {
                   tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(var(--muted-foreground))" }}
                   angle={-45}
                   textAnchor="end"
-                  interval={Math.ceil(hours.length / 16)}
+                  interval={scrubMode ? 0 : Math.ceil(displayHours.length / 16)}
                   stroke="hsl(var(--border))"
                 />
                 <YAxis
@@ -179,8 +239,92 @@ export default function TimelinePage() {
           )}
         </div>
 
+        {/* ── Playback Scrubber ────────────────────────────────────────── */}
+        {!isLoading && hours.length > SCRUB_WINDOW && (
+          <div className="bg-card border border-border rounded-md px-4 py-3 shrink-0 space-y-2">
+            {/* Controls row */}
+            <div className="flex items-center gap-3">
+              {/* Enable/disable scrub mode */}
+              <button
+                onClick={() => { setScrubMode(v => !v); setIsPlaying(false); setScrubIdx(0); }}
+                className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border transition-colors ${
+                  scrubMode
+                    ? "bg-primary/20 border-primary/50 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+                }`}
+              >
+                {scrubMode ? "EXIT PLAYBACK" : "▶ PLAYBACK"}
+              </button>
+
+              {scrubMode && (
+                <>
+                  {/* Reset */}
+                  <button
+                    onClick={() => { setScrubIdx(0); setIsPlaying(false); }}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    title="Reset to start"
+                  >
+                    <SkipBack className="w-4 h-4" />
+                  </button>
+
+                  {/* Play/Pause */}
+                  <button
+                    onClick={() => setIsPlaying(v => !v)}
+                    disabled={scrubIdx >= maxScrub}
+                    className={`flex items-center gap-1 text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border transition-colors disabled:opacity-40 ${
+                      isPlaying
+                        ? "bg-red-500/20 border-red-500/50 text-red-400"
+                        : "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                    }`}
+                  >
+                    {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                    {isPlaying ? "PAUSE" : "PLAY"}
+                  </button>
+
+                  {/* Speed toggle */}
+                  <button
+                    onClick={() => { setSpeedIdx(i => (i === 0 ? 1 : 0) as SpeedIdx); }}
+                    className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {SPEEDS[speedIdx].label}
+                  </button>
+
+                  {/* Current window label */}
+                  {scrubStartLabel && (
+                    <span className="text-[10px] font-mono text-muted-foreground ml-auto">
+                      <span className="text-foreground font-bold">{scrubStartLabel}</span>
+                      {scrubEndLabel && ` → ${scrubEndLabel}`}
+                      <span className="text-muted-foreground/60"> ({SCRUB_WINDOW}h window)</span>
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Range slider */}
+            {scrubMode && (
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] font-mono text-muted-foreground shrink-0">
+                  {hours[0] ? new Date(hours[0].hour).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit" }) : ""}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={maxScrub}
+                  value={scrubIdx}
+                  onChange={e => { setScrubIdx(Number(e.target.value)); setIsPlaying(false); }}
+                  className="flex-1 h-1.5 accent-primary cursor-pointer"
+                />
+                <span className="text-[9px] font-mono text-muted-foreground shrink-0">
+                  {hours[hours.length - 1] ? new Date(hours[hours.length - 1].hour).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit" }) : ""}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Busiest hour callout */}
-        {!isLoading && busiest.total > 0 && (
+        {!isLoading && busiest.total > 0 && !scrubMode && (
           <p className="text-[10px] font-mono text-muted-foreground shrink-0">
             Peak activity:{" "}
             <span className="text-foreground font-bold">
