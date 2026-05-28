@@ -5,10 +5,22 @@
  * OSINT Platform API - collects and analyzes events from Arabic news sources
  * OpenAPI spec version: 1.0.0
  */
+export interface SystemMetrics {
+  cpu_percent: number;
+  memory_mb: number;
+  memory_percent: number;
+  uptime_seconds: number;
+  sse_subscribers: number;
+  events_total: number;
+  events_today: number;
+  alerts_total: number;
+}
+
 export interface HealthStatus {
   status: string;
   version?: string;
   database?: string;
+  metrics?: SystemMetrics | null;
 }
 
 export type EventResponseSide = typeof EventResponseSide[keyof typeof EventResponseSide];
@@ -18,6 +30,16 @@ export const EventResponseSide = {
   red: 'red',
   blue: 'blue',
   neutral: 'neutral',
+} as const;
+
+export type EventResponseConfidenceLevel = typeof EventResponseConfidenceLevel[keyof typeof EventResponseConfidenceLevel];
+
+
+export const EventResponseConfidenceLevel = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  verified: 'verified',
 } as const;
 
 export interface EventResponse {
@@ -57,6 +79,12 @@ export interface EventResponse {
   importance_score?: number;
   /** @nullable */
   importance_tags?: string | null;
+  confirmation_count?: number;
+  /** @nullable */
+  confirming_sources?: string | null;
+  has_media?: boolean;
+  propaganda_score?: number;
+  confidence_level?: EventResponseConfidenceLevel;
 }
 
 export interface EventInput {
@@ -252,6 +280,8 @@ lat?: number;
 lng?: number;
 radius_km?: number;
 is_important?: boolean;
+confidence_level?: ListEventsConfidenceLevel;
+hide_propaganda?: boolean;
 limit?: number;
 offset?: number;
 };
@@ -265,8 +295,19 @@ export const ListEventsSide = {
   neutral: 'neutral',
 } as const;
 
+export type ListEventsConfidenceLevel = typeof ListEventsConfidenceLevel[keyof typeof ListEventsConfidenceLevel];
+
+
+export const ListEventsConfidenceLevel = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  verified: 'verified',
+} as const;
+
 export type ListAlertsParams = {
 side?: ListAlertsSide;
+confidence_level?: ListAlertsConfidenceLevel;
 limit?: number;
 };
 
@@ -277,6 +318,16 @@ export const ListAlertsSide = {
   red: 'red',
   blue: 'blue',
   neutral: 'neutral',
+} as const;
+
+export type ListAlertsConfidenceLevel = typeof ListAlertsConfidenceLevel[keyof typeof ListAlertsConfidenceLevel];
+
+
+export const ListAlertsConfidenceLevel = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  verified: 'verified',
 } as const;
 
 export type GetEventsTimelineParams = {

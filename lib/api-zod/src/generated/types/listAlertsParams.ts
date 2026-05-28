@@ -5,9 +5,11 @@
  * OSINT Platform API - collects and analyzes events from Arabic news sources
  * OpenAPI spec version: 1.0.0
  */
+import type { ListAlertsConfidenceLevel } from './listAlertsConfidenceLevel';
 import type { ListAlertsSide } from './listAlertsSide';
 
 export type ListAlertsParams = {
 side?: ListAlertsSide;
+confidence_level?: ListAlertsConfidenceLevel;
 limit?: number;
 };

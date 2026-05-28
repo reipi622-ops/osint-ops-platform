@@ -5,9 +5,11 @@
  * OSINT Platform API - collects and analyzes events from Arabic news sources
  * OpenAPI spec version: 1.0.0
  */
+import type { SystemMetrics } from './systemMetrics';
 
 export interface HealthStatus {
   status: string;
   version?: string;
   database?: string;
+  metrics?: SystemMetrics | null;
 }

@@ -101,7 +101,6 @@ async def init_client() -> None:
     """Called once from FastAPI lifespan. Safe to call even if not configured."""
     global _client, _main_loop
 
-    # Capture the server event loop once — used for thread-safe SSE broadcasting
     _main_loop = asyncio.get_running_loop()
 
     from app.config import TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH
@@ -120,8 +119,27 @@ async def init_client() -> None:
             int(TELEGRAM_API_ID),
             TELEGRAM_API_HASH,
         )
-        await _client.connect()
-        _status["connected"] = True
+
+        # Exponential backoff reconnect (up to 5 attempts)
+        connected = False
+        for attempt in range(5):
+            try:
+                await _client.connect()
+                connected = True
+                _status["connected"] = True
+                break
+            except Exception as conn_exc:
+                wait = 2 ** attempt
+                logger.warning(
+                    "Telegram: connect attempt %d/5 failed: %s — retrying in %ds",
+                    attempt + 1, conn_exc, wait,
+                )
+                await asyncio.sleep(wait)
+
+        if not connected:
+            _status["error"] = "Failed to connect after 5 attempts"
+            logger.error("Telegram: could not connect after 5 retries")
+            return
 
         if await _client.is_user_authorized():
             me = await _client.get_me()
@@ -257,7 +275,6 @@ async def refresh_active_channels() -> None:
     _active_usernames = names
     _status["channels_active"] = count
 
-    # Pre-populate last_message_id from DB for new channels (avoid reprocessing old msgs)
     for uname, last_id in rows_info:
         if uname not in _channel_last_ids and last_id:
             _channel_last_ids[uname] = last_id
@@ -267,7 +284,6 @@ async def refresh_active_channels() -> None:
         count, sorted(names),
     )
 
-    # Join any newly-added channels so Telethon receives their live updates
     if _client and _client.is_connected():
         for uname in names:
             await _join_channel(uname)
@@ -276,11 +292,6 @@ async def refresh_active_channels() -> None:
 # ── channel joining ───────────────────────────────────────────────────────────
 
 async def _join_channel(username: str) -> bool:
-    """
-    Join a public broadcast channel via JoinChannelRequest.
-    REQUIRED: Telethon's NewMessage event only fires for channels the account is a member of.
-    Idempotent — safe to call if already joined.
-    """
     global _client, _channel_status
     norm = _normalize_username(username)
 
@@ -304,11 +315,6 @@ async def _join_channel(username: str) -> bool:
 # ── polling fallback ──────────────────────────────────────────────────────────
 
 async def _poll_channel_once(username: str, limit: int = 10) -> int:
-    """
-    Fetch the latest `limit` messages from a channel and process any we haven't seen.
-    Used by both the polling loop (fallback) and the manual test-fetch endpoint.
-    Returns the count of newly processed messages.
-    """
     global _client, _channel_last_ids, _channel_status
 
     norm = _normalize_username(username)
@@ -320,18 +326,19 @@ async def _poll_channel_once(username: str, limit: int = 10) -> int:
         entity = await _client.get_entity(username)
         last_id = _channel_last_ids.get(norm, 0)
 
-        # get_messages returns newest-first; pass min_id to skip already-processed ones
         msgs = await _client.get_messages(entity, limit=limit, min_id=last_id)
 
         new_count = 0
-        for msg in reversed(list(msgs)):   # process oldest → newest
+        for msg in reversed(list(msgs)):
             if not msg.message:
                 continue
             if msg.id <= last_id:
                 continue
             _channel_last_ids[norm] = max(_channel_last_ids.get(norm, 0), msg.id)
+            # Detect media evidence from the message object
+            has_media = bool(getattr(msg, "media", None))
             await asyncio.to_thread(
-                _process_message_sync, msg.message, username, entity.id, msg.id
+                _process_message_sync, msg.message, username, entity.id, msg.id, has_media
             )
             new_count += 1
 
@@ -353,23 +360,13 @@ async def _poll_channel_once(username: str, limit: int = 10) -> int:
 
 
 async def fetch_latest_messages(username: str, limit: int = 10) -> dict:
-    """
-    Public API used by the 'Test Fetch' button.
-    Resets the last-seen ID so we unconditionally re-fetch the most recent messages.
-    Returns {"fetched": int, "channel": str}.
-    """
     norm = _normalize_username(username)
-    # Reset so we fetch regardless of previously seen IDs
     _channel_last_ids.pop(norm, None)
     fetched = await _poll_channel_once(username, limit=limit)
     return {"fetched": fetched, "channel": username}
 
 
 async def _poll_loop() -> None:
-    """
-    Background task: poll every 30 s as a fallback in case live NewMessage events
-    are not firing (e.g. the account isn't receiving real-time MTProto updates).
-    """
     logger.info("Telegram: polling fallback loop started (30 s interval)")
     while True:
         await asyncio.sleep(30)
@@ -393,14 +390,11 @@ async def _start_monitoring() -> None:
     if not _handler_registered:
         from telethon import events as tg_events
 
-        # Raw handler — logs every incoming MTProto update so we can diagnose
-        # whether the connection is receiving anything at all
         @_client.on(tg_events.Raw)
         async def _raw_handler(update):
             _status["raw_updates_received"] += 1
             logger.debug("Telegram: raw update #%d — %s", _status["raw_updates_received"], type(update).__name__)
 
-        # Primary handler — security-gated, whitelist-only
         _client.add_event_handler(_handle_message, tg_events.NewMessage)
 
         _handler_registered = True
@@ -408,7 +402,6 @@ async def _start_monitoring() -> None:
 
     await refresh_active_channels()
 
-    # Start the polling fallback task (cancel old one first if it's running)
     if _polling_task and not _polling_task.done():
         _polling_task.cancel()
     _polling_task = asyncio.create_task(_poll_loop())
@@ -428,7 +421,6 @@ async def _handle_message(event) -> None:
     """
     global _active_usernames
 
-    # ── Raw log — always fires if the event is received ──────────────────────
     chat_id_raw = getattr(event, "chat_id", "?")
     logger.info(
         "Telegram: NewMessage event received — chat_id=%s peer_id=%s",
@@ -442,7 +434,6 @@ async def _handle_message(event) -> None:
         chat_id = getattr(chat, "id", None)
         chat_type = type(chat).__name__
 
-        # ── Gate 1: must be a public broadcast channel ──────────────────────
         if not _is_public_broadcast(chat):
             _status["messages_rejected"] += 1
             logger.warning(
@@ -454,7 +445,6 @@ async def _handle_message(event) -> None:
             )
             return
 
-        # ── Gate 2: must be in the approved whitelist ────────────────────────
         if not _active_usernames:
             _status["messages_rejected"] += 1
             logger.warning("Security: dropped — whitelist is empty (no approved channels)")
@@ -469,23 +459,22 @@ async def _handle_message(event) -> None:
             )
             return
 
-        # ── Passed all gates ─────────────────────────────────────────────────
         text = event.message.message or ""
         if not text.strip():
             return
 
         msg_id = getattr(event.message, "id", 0)
+        has_media = bool(getattr(event.message, "media", None))
         logger.info(
-            "Security: ACCEPTED message from @%s msg_id=%s (%d chars)",
-            chat_username, msg_id, len(text),
+            "Security: ACCEPTED message from @%s msg_id=%s (%d chars) has_media=%s",
+            chat_username, msg_id, len(text), has_media,
         )
 
-        # Update last_message_id so polling doesn't reprocess it
         norm = _normalize_username(chat_username)
         _channel_last_ids[norm] = max(_channel_last_ids.get(norm, 0), msg_id)
 
         await asyncio.to_thread(
-            _process_message_sync, text, chat_username, chat_id, msg_id
+            _process_message_sync, text, chat_username, chat_id, msg_id, has_media
         )
 
     except Exception as exc:
@@ -497,32 +486,50 @@ def _process_message_sync(
     channel_username: str,
     channel_tg_id: Optional[int],
     message_id: int,
+    has_media: bool = False,
 ) -> None:
-    """Synchronous pipeline: translate → classify → importance → geolocate → store → broadcast."""
+    """Synchronous pipeline: translate → classify → importance → propaganda → geolocate → store → broadcast."""
     from app.database import SessionLocal
     from app import models
-    from app.services.classifier import classify_event, classify_side, detect_importance
-    from app.services.deduplicator import compute_hash, is_near_duplicate, register_event
+    from app.services.classifier import (
+        classify_event,
+        classify_side,
+        detect_importance,
+        detect_propaganda,
+        detect_text_has_media_keywords,
+        compute_confidence_level,
+    )
+    from app.services.deduplicator import (
+        compute_hash,
+        is_near_duplicate,
+        register_event,
+        credit_confirmation,
+    )
     from app.services.geolocator import extract_location
     from app.services.translator import translate_text
     from app.services.event_broadcaster import broadcaster
 
     db = SessionLocal()
     try:
+        # ── Exact-dedup ──────────────────────────────────────────────────────
         event_hash = compute_hash(text, "")
         if db.query(models.Event).filter(models.Event.event_hash == event_hash).first():
             logger.debug("Telegram: skipping exact-duplicate msg_id=%s from @%s", message_id, channel_username)
             return
 
-        # Near-duplicate check (same event from multiple channels, slightly different wording)
+        # ── Near-dedup (multi-source confirmation) ───────────────────────────
         near_dup, near_dup_id = is_near_duplicate(text)
-        if near_dup:
+        if near_dup and near_dup_id:
             logger.info(
-                "Telegram: near-duplicate detected msg_id=%s @%s — similar to event_id=%s, skipping",
+                "Telegram: near-duplicate msg_id=%s @%s → crediting event_id=%s as confirmation",
                 message_id, channel_username, near_dup_id,
             )
+            credit_confirmation(near_dup_id, f"@{channel_username}")
+            # Also register in dedup window so future identical messages are caught
+            register_event(text, near_dup_id)
             return
 
+        # ── Full classification pipeline ─────────────────────────────────────
         is_ar = _is_arabic(text)
         original_lang = "ar" if is_ar else "en"
         title_he = translate_text(text[:300], original_lang, "he") if is_ar else text[:300]
@@ -531,6 +538,19 @@ def _process_message_sync(
         category, confidence = classify_event(text, "")
         side, _side_conf = classify_side(text, "")
         is_important, importance_score, importance_tags = detect_importance(text, "")
+        propaganda_score = detect_propaganda(text)
+
+        # Media evidence: explicit attachment OR media keywords in text
+        effective_has_media = has_media or detect_text_has_media_keywords(text)
+
+        confidence_level = compute_confidence_level(
+            confidence=confidence,
+            importance_score=importance_score,
+            confirmation_count=0,       # starts fresh; incremented by future near-dups
+            has_media=effective_has_media,
+            propaganda_score=propaganda_score,
+        )
+
         location_name, lat, lng = extract_location(text)
 
         source_url = f"https://t.me/{channel_username}"
@@ -557,6 +577,11 @@ def _process_message_sync(
             is_important=is_important,
             importance_score=importance_score,
             importance_tags=importance_tags or None,
+            has_media=effective_has_media,
+            propaganda_score=propaganda_score,
+            confidence_level=confidence_level,
+            confirmation_count=0,
+            confirming_sources=None,
             source_id=source.id,
             source_name=source.name,
             source_url=source_url,
@@ -589,8 +614,6 @@ def _process_message_sync(
         try:
             db.commit()
         except Exception as commit_exc:
-            # Race between live handler and polling — same message, both saw no existing row.
-            # Treat as harmless duplicate and bail out silently.
             db.rollback()
             logger.debug(
                 "Telegram: duplicate insert skipped (race condition) msg_id=%s @%s: %s",
@@ -602,16 +625,19 @@ def _process_message_sync(
         _status["messages_processed"] += 1
         _status["last_message_at"] = now
 
-        # Register in near-dedup window so subsequent similar messages are dropped
         register_event(text, ev.id)
 
         if is_important:
             logger.info(
-                "Telegram: ⚠ IMPORTANT event id=%d score=%.2f tags=[%s] @%s",
-                ev.id, importance_score, importance_tags, channel_username,
+                "Telegram: ⚠ IMPORTANT event id=%d score=%.2f tags=[%s] level=%s @%s",
+                ev.id, importance_score, importance_tags, confidence_level, channel_username,
+            )
+        if propaganda_score >= 0.50:
+            logger.warning(
+                "Telegram: ⚑ HIGH PROPAGANDA event id=%d score=%.2f @%s",
+                ev.id, propaganda_score, channel_username,
             )
 
-        # Broadcast to SSE clients — use the captured main loop for thread safety
         from pydantic import TypeAdapter
         from app.schemas import EventResponse
         payload = TypeAdapter(EventResponse).validate_python(ev).model_dump(mode="json")
@@ -622,8 +648,8 @@ def _process_message_sync(
             logger.warning("Telegram: _main_loop not available — SSE broadcast skipped")
 
         logger.info(
-            "Telegram: stored event id=%d category=%s side=%s from @%s",
-            ev.id, ev.category, ev.side, channel_username,
+            "Telegram: stored event id=%d category=%s side=%s level=%s propaganda=%.2f @%s",
+            ev.id, ev.category, ev.side, confidence_level, propaganda_score, channel_username,
         )
 
     except Exception as exc:

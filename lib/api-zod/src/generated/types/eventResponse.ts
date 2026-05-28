@@ -5,6 +5,7 @@
  * OSINT Platform API - collects and analyzes events from Arabic news sources
  * OpenAPI spec version: 1.0.0
  */
+import type { EventResponseConfidenceLevel } from './eventResponseConfidenceLevel';
 import type { EventResponseSide } from './eventResponseSide';
 
 export interface EventResponse {
@@ -44,4 +45,10 @@ export interface EventResponse {
   importance_score?: number;
   /** @nullable */
   importance_tags?: string | null;
+  confirmation_count?: number;
+  /** @nullable */
+  confirming_sources?: string | null;
+  has_media?: boolean;
+  propaganda_score?: number;
+  confidence_level?: EventResponseConfidenceLevel;
 }

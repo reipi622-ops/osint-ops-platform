@@ -74,6 +74,35 @@ export const CATEGORIES = [
 ] as const;
 
 // ── Importance tag display metadata ───────────────────────────────────────────
+// ── Intelligence Confidence Levels ─────────────────────────────────────────────
+export const CONFIDENCE_LEVEL_LABELS: Record<string, string> = {
+  low:      "Low",
+  medium:   "Medium",
+  high:     "High",
+  verified: "Verified",
+};
+
+export const CONFIDENCE_LEVEL_COLORS: Record<string, string> = {
+  low:      "bg-slate-500",
+  medium:   "bg-yellow-500",
+  high:     "bg-emerald-500",
+  verified: "bg-violet-500",
+};
+
+export const CONFIDENCE_LEVEL_TEXT_COLORS: Record<string, string> = {
+  low:      "text-slate-400",
+  medium:   "text-yellow-400",
+  high:     "text-emerald-400",
+  verified: "text-violet-400",
+};
+
+export const CONFIDENCE_LEVEL_HEX: Record<string, string> = {
+  low:      "#64748b",
+  medium:   "#eab308",
+  high:     "#10b981",
+  verified: "#8b5cf6",
+};
+
 export const IMPORTANCE_TAG_LABELS: Record<string, { label: string; icon: string }> = {
   rockets:           { label: "טילים/רקטות",       icon: "🚀" },
   uav:               { label: 'כטב"מ',              icon: "🛸" },

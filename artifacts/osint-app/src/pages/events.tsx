@@ -10,8 +10,9 @@ import {
 } from "@/components/ui/select";
 import {
   CATEGORY_COLORS, SIDE_COLORS, SIDE_LABELS_EN, SIDE_HEX_COLORS, CATEGORIES,
+  CONFIDENCE_LEVEL_COLORS, CONFIDENCE_LEVEL_LABELS,
 } from "@/lib/constants";
-import { Loader2, Search, X, Radio, Flame } from "lucide-react";
+import { Loader2, Search, X, Radio, Flame, ShieldAlert } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -21,15 +22,19 @@ import type { EventResponse } from "@workspace/api-client-react";
 
 const SIDES = ["red", "blue", "neutral"] as const;
 type Side = typeof SIDES[number];
+const CONF_LEVELS = ["low", "medium", "high", "verified"] as const;
+type ConfLevel = typeof CONF_LEVELS[number];
 
 export default function EventsList() {
-  const [search, setSearch]         = useState("");
-  const [side, setSide]             = useState<Side | "">("");
-  const [category, setCategory]     = useState<string>("");
-  const [sourceName, setSourceName] = useState<string>("");
+  const [search, setSearch]               = useState("");
+  const [side, setSide]                   = useState<Side | "">("");
+  const [category, setCategory]           = useState<string>("");
+  const [sourceName, setSourceName]       = useState<string>("");
   const [onlyImportant, setOnlyImportant] = useState(false);
-  const [page, setPage]             = useState(0);
-  const [drawerEvent, setDrawerEvent] = useState<EventResponse | null>(null);
+  const [confLevel, setConfLevel]         = useState<ConfLevel | "">("");
+  const [hidePropaganda, setHidePropaganda] = useState(false);
+  const [page, setPage]                   = useState(0);
+  const [drawerEvent, setDrawerEvent]     = useState<EventResponse | null>(null);
   const PAGE = 100;
 
   const { data: eventsData, isLoading } = useListEvents({
@@ -38,6 +43,8 @@ export default function EventsList() {
     category: category || undefined,
     source_name: sourceName || undefined,
     is_important: onlyImportant ? true : undefined,
+    confidence_level: confLevel || undefined,
+    hide_propaganda: hidePropaganda ? true : undefined,
     limit: PAGE,
     offset: page * PAGE,
   });
@@ -55,6 +62,8 @@ export default function EventsList() {
       if (category && e.category !== category) return false;
       if (sourceName && !e.source_name?.toLowerCase().includes(sourceName.toLowerCase())) return false;
       if (onlyImportant && !e.is_important) return false;
+      if (confLevel && e.confidence_level !== confLevel) return false;
+      if (hidePropaganda && (e.propaganda_score ?? 0) >= 0.5) return false;
       if (search) {
         const q = search.toLowerCase();
         if (!e.title?.toLowerCase().includes(q) &&
@@ -64,12 +73,13 @@ export default function EventsList() {
       return true;
     });
     return [...fresh, ...base];
-  }, [eventsData, liveEvents, side, category, sourceName, search, onlyImportant]);
+  }, [eventsData, liveEvents, side, category, sourceName, search, onlyImportant, confLevel, hidePropaganda]);
 
-  const hasFilters = side || category || sourceName || search || onlyImportant;
+  const hasFilters = side || category || sourceName || search || onlyImportant || confLevel || hidePropaganda;
 
   const clearFilters = () => {
-    setSide(""); setCategory(""); setSourceName(""); setSearch(""); setOnlyImportant(false); setPage(0);
+    setSide(""); setCategory(""); setSourceName(""); setSearch("");
+    setOnlyImportant(false); setConfLevel(""); setHidePropaganda(false); setPage(0);
   };
 
   const uniqueSources = useMemo(() => {
@@ -162,6 +172,24 @@ export default function EventsList() {
             </SelectContent>
           </Select>
 
+          {/* Confidence level filter */}
+          <Select value={confLevel || "_all"} onValueChange={v => { setConfLevel(v === "_all" ? "" : v as ConfLevel); setPage(0); }}>
+            <SelectTrigger className="w-[140px] font-mono text-xs bg-card border-border h-9">
+              <SelectValue placeholder="Intel Level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all" className="font-mono text-xs">All Levels</SelectItem>
+              {CONF_LEVELS.map(l => (
+                <SelectItem key={l} value={l} className="font-mono text-xs">
+                  <span className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full inline-block ${CONFIDENCE_LEVEL_COLORS[l]}`} />
+                    {CONFIDENCE_LEVEL_LABELS[l]}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           {/* Alerts-only toggle */}
           <button
             onClick={() => { setOnlyImportant(v => !v); setPage(0); }}
@@ -173,6 +201,20 @@ export default function EventsList() {
           >
             <Flame className="w-3 h-3" />
             ALERTS
+          </button>
+
+          {/* Hide propaganda toggle */}
+          <button
+            onClick={() => { setHidePropaganda(v => !v); setPage(0); }}
+            title="Hide high-propaganda content"
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-[10px] font-mono font-bold uppercase border transition-colors ${
+              hidePropaganda
+                ? "bg-violet-500/20 border-violet-500/50 text-violet-400"
+                : "border-border text-muted-foreground hover:text-violet-400 hover:border-violet-500/40"
+            }`}
+          >
+            <ShieldAlert className="w-3 h-3" />
+            FILTER BIAS
           </button>
 
           {hasFilters && (
@@ -199,7 +241,7 @@ export default function EventsList() {
                     <TableHead className="font-mono text-xs w-[120px]">CATEGORY</TableHead>
                     <TableHead className="font-mono text-xs">TITLE (HE)</TableHead>
                     <TableHead className="font-mono text-xs w-[130px]">LOCATION</TableHead>
-                    <TableHead className="font-mono text-xs w-[140px]">SOURCE</TableHead>
+                    <TableHead className="font-mono text-xs w-[100px]">INTEL LEVEL</TableHead>
                     <TableHead className="font-mono text-xs w-[120px]">CONFIDENCE</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -244,8 +286,16 @@ export default function EventsList() {
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap truncate max-w-[130px]">
                         {event.location_name || "—"}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap truncate max-w-[140px]">
-                        {event.source_name || "—"}
+                      <TableCell>
+                        {event.confidence_level && (
+                          <Badge
+                            className={`font-mono text-[9px] uppercase border-none text-white ${
+                              CONFIDENCE_LEVEL_COLORS[event.confidence_level] ?? "bg-slate-500"
+                            }`}
+                          >
+                            {CONFIDENCE_LEVEL_LABELS[event.confidence_level] ?? event.confidence_level}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

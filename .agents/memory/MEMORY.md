@@ -1,3 +1,6 @@
 - [Python on Nix](python-nix.md) — pip needs `--break-system-packages` in Nix; use `python3 -m pip` and `python3 -m uvicorn`, pre-install before workflow start
 - [React Query hook options](react-query-hook-options.md) — query hooks require explicit `queryKey` inside options even when using refetchInterval or enabled
 - [OSINT Stack](osint-stack.md) — FastAPI+SQLite+Telethon backend, React/Vite+Leaflet+Recharts frontend; key quirks for this project
+- [Backend intelligence pipeline](osint-intelligence-pipeline.md) — classifier→deduplicator→broadcaster; near-dup calls credit_confirmation() not silent drop; confidence_level is low/medium/high/verified
+- [Near-dup Jaccard threshold](osint-near-dup.md) — threshold 0.72; test strings must share ≥73% of word tokens; "airstrikes" vs "air strikes" are different tokens
+- [Codegen before typecheck](codegen-typecheck.md) — always run api-spec codegen before frontend typecheck; codegen also runs typecheck:libs in the same command

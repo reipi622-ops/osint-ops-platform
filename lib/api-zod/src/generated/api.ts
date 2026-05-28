@@ -15,7 +15,17 @@ import * as zod from 'zod';
 export const HealthCheckResponse = zod.object({
   "status": zod.string(),
   "version": zod.string().optional(),
-  "database": zod.string().optional()
+  "database": zod.string().optional(),
+  "metrics": zod.union([zod.object({
+  "cpu_percent": zod.number(),
+  "memory_mb": zod.number(),
+  "memory_percent": zod.number(),
+  "uptime_seconds": zod.number(),
+  "sse_subscribers": zod.number(),
+  "events_total": zod.number(),
+  "events_today": zod.number(),
+  "alerts_total": zod.number()
+}),zod.null()]).optional()
 })
 
 
@@ -38,6 +48,8 @@ export const ListEventsQueryParams = zod.object({
   "lng": zod.coerce.number().optional(),
   "radius_km": zod.coerce.number().optional(),
   "is_important": zod.coerce.boolean().optional(),
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).optional(),
+  "hide_propaganda": zod.coerce.boolean().optional(),
   "limit": zod.coerce.number().default(listEventsQueryLimitDefault),
   "offset": zod.coerce.number().default(listEventsQueryOffsetDefault)
 })
@@ -45,6 +57,10 @@ export const ListEventsQueryParams = zod.object({
 export const listEventsResponseItemsItemSideDefault = `neutral`;
 export const listEventsResponseItemsItemIsImportantDefault = false;
 export const listEventsResponseItemsItemImportanceScoreDefault = 0;
+export const listEventsResponseItemsItemConfirmationCountDefault = 0;
+export const listEventsResponseItemsItemHasMediaDefault = false;
+export const listEventsResponseItemsItemPropagandaScoreDefault = 0;
+export const listEventsResponseItemsItemConfidenceLevelDefault = `low`;
 
 export const ListEventsResponse = zod.object({
   "items": zod.array(zod.object({
@@ -71,7 +87,12 @@ export const ListEventsResponse = zod.object({
   "event_date": zod.coerce.date().nullish(),
   "is_important": zod.boolean().default(listEventsResponseItemsItemIsImportantDefault),
   "importance_score": zod.number().default(listEventsResponseItemsItemImportanceScoreDefault),
-  "importance_tags": zod.string().nullish()
+  "importance_tags": zod.string().nullish(),
+  "confirmation_count": zod.number().default(listEventsResponseItemsItemConfirmationCountDefault),
+  "confirming_sources": zod.string().nullish(),
+  "has_media": zod.boolean().default(listEventsResponseItemsItemHasMediaDefault),
+  "propaganda_score": zod.number().default(listEventsResponseItemsItemPropagandaScoreDefault),
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(listEventsResponseItemsItemConfidenceLevelDefault)
 })),
   "total": zod.number(),
   "offset": zod.number(),
@@ -112,12 +133,17 @@ export const listAlertsQueryLimitDefault = 50;
 
 export const ListAlertsQueryParams = zod.object({
   "side": zod.enum(['red', 'blue', 'neutral']).optional(),
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).optional(),
   "limit": zod.coerce.number().default(listAlertsQueryLimitDefault)
 })
 
 export const listAlertsResponseItemsItemSideDefault = `neutral`;
 export const listAlertsResponseItemsItemIsImportantDefault = false;
 export const listAlertsResponseItemsItemImportanceScoreDefault = 0;
+export const listAlertsResponseItemsItemConfirmationCountDefault = 0;
+export const listAlertsResponseItemsItemHasMediaDefault = false;
+export const listAlertsResponseItemsItemPropagandaScoreDefault = 0;
+export const listAlertsResponseItemsItemConfidenceLevelDefault = `low`;
 
 export const ListAlertsResponse = zod.object({
   "items": zod.array(zod.object({
@@ -144,7 +170,12 @@ export const ListAlertsResponse = zod.object({
   "event_date": zod.coerce.date().nullish(),
   "is_important": zod.boolean().default(listAlertsResponseItemsItemIsImportantDefault),
   "importance_score": zod.number().default(listAlertsResponseItemsItemImportanceScoreDefault),
-  "importance_tags": zod.string().nullish()
+  "importance_tags": zod.string().nullish(),
+  "confirmation_count": zod.number().default(listAlertsResponseItemsItemConfirmationCountDefault),
+  "confirming_sources": zod.string().nullish(),
+  "has_media": zod.boolean().default(listAlertsResponseItemsItemHasMediaDefault),
+  "propaganda_score": zod.number().default(listAlertsResponseItemsItemPropagandaScoreDefault),
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(listAlertsResponseItemsItemConfidenceLevelDefault)
 })),
   "total": zod.number(),
   "offset": zod.number(),
@@ -209,6 +240,10 @@ export const GetEventParams = zod.object({
 export const getEventResponseSideDefault = `neutral`;
 export const getEventResponseIsImportantDefault = false;
 export const getEventResponseImportanceScoreDefault = 0;
+export const getEventResponseConfirmationCountDefault = 0;
+export const getEventResponseHasMediaDefault = false;
+export const getEventResponsePropagandaScoreDefault = 0;
+export const getEventResponseConfidenceLevelDefault = `low`;
 
 export const GetEventResponse = zod.object({
   "id": zod.number(),
@@ -234,7 +269,12 @@ export const GetEventResponse = zod.object({
   "event_date": zod.coerce.date().nullish(),
   "is_important": zod.boolean().default(getEventResponseIsImportantDefault),
   "importance_score": zod.number().default(getEventResponseImportanceScoreDefault),
-  "importance_tags": zod.string().nullish()
+  "importance_tags": zod.string().nullish(),
+  "confirmation_count": zod.number().default(getEventResponseConfirmationCountDefault),
+  "confirming_sources": zod.string().nullish(),
+  "has_media": zod.boolean().default(getEventResponseHasMediaDefault),
+  "propaganda_score": zod.number().default(getEventResponsePropagandaScoreDefault),
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(getEventResponseConfidenceLevelDefault)
 })
 
 
@@ -259,6 +299,10 @@ export const UpdateEventBody = zod.object({
 export const updateEventResponseSideDefault = `neutral`;
 export const updateEventResponseIsImportantDefault = false;
 export const updateEventResponseImportanceScoreDefault = 0;
+export const updateEventResponseConfirmationCountDefault = 0;
+export const updateEventResponseHasMediaDefault = false;
+export const updateEventResponsePropagandaScoreDefault = 0;
+export const updateEventResponseConfidenceLevelDefault = `low`;
 
 export const UpdateEventResponse = zod.object({
   "id": zod.number(),
@@ -284,7 +328,12 @@ export const UpdateEventResponse = zod.object({
   "event_date": zod.coerce.date().nullish(),
   "is_important": zod.boolean().default(updateEventResponseIsImportantDefault),
   "importance_score": zod.number().default(updateEventResponseImportanceScoreDefault),
-  "importance_tags": zod.string().nullish()
+  "importance_tags": zod.string().nullish(),
+  "confirmation_count": zod.number().default(updateEventResponseConfirmationCountDefault),
+  "confirming_sources": zod.string().nullish(),
+  "has_media": zod.boolean().default(updateEventResponseHasMediaDefault),
+  "propaganda_score": zod.number().default(updateEventResponsePropagandaScoreDefault),
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(updateEventResponseConfidenceLevelDefault)
 })
 
 

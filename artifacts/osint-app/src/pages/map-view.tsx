@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
 import {
   SIDE_HEX_COLORS, SIDE_COLORS, SIDE_LABELS_EN, SIDE_TEXT_COLORS,
-  CATEGORY_COLORS, CATEGORIES,
+  CATEGORY_COLORS, CATEGORIES, CONFIDENCE_LEVEL_COLORS, CONFIDENCE_LEVEL_LABELS,
 } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Loader2, Radio, X, MapPin, Flame } from "lucide-react";
+import { Search, Loader2, Radio, X, MapPin, Flame, ShieldAlert } from "lucide-react";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import type { EventResponse } from "@workspace/api-client-react";
 
@@ -28,14 +28,25 @@ function LiveEventFlyTo({ event }: { event: EventResponse | null }) {
   return null;
 }
 
+/** Map confidence_level → marker fill-opacity (verified = solid, low = faded) */
+function confidenceOpacity(level?: string | null): number {
+  switch (level) {
+    case "verified": return 0.95;
+    case "high":     return 0.80;
+    case "medium":   return 0.65;
+    default:         return 0.45;
+  }
+}
+
 export default function MapView() {
-  const [search, setSearch]           = useState("");
-  const [side, setSide]               = useState<Side | "">("");
-  const [category, setCategory]       = useState<string>("");
-  const [onlyMapped, setOnlyMapped]   = useState(false);
+  const [search, setSearch]             = useState("");
+  const [side, setSide]                 = useState<Side | "">("");
+  const [category, setCategory]         = useState<string>("");
+  const [onlyMapped, setOnlyMapped]     = useState(false);
   const [onlyImportant, setOnlyImportant] = useState(false);
-  const [drawerEvent, setDrawerEvent] = useState<EventResponse | null>(null);
-  const [latestLive, setLatestLive]   = useState<EventResponse | null>(null);
+  const [hidePropaganda, setHidePropaganda] = useState(false);
+  const [drawerEvent, setDrawerEvent]   = useState<EventResponse | null>(null);
+  const [latestLive, setLatestLive]     = useState<EventResponse | null>(null);
 
   const { data: eventsData, isLoading } = useListEvents({
     search: search || undefined,
@@ -43,6 +54,7 @@ export default function MapView() {
     category: category || undefined,
     has_location: onlyMapped ? true : undefined,
     is_important: onlyImportant ? true : undefined,
+    hide_propaganda: hidePropaganda ? true : undefined,
     limit: 300,
   });
 
@@ -57,10 +69,11 @@ export default function MapView() {
       if (category && e.category !== category) return false;
       if (onlyMapped && (!e.lat || !e.lng)) return false;
       if (onlyImportant && !e.is_important) return false;
+      if (hidePropaganda && (e.propaganda_score ?? 0) >= 0.5) return false;
       return true;
     });
     return [...fresh, ...base];
-  }, [eventsData, liveEvents, side, category, onlyMapped, onlyImportant]);
+  }, [eventsData, liveEvents, side, category, onlyMapped, onlyImportant, hidePropaganda]);
 
   useMemo(() => {
     const withLoc = liveEvents.find(e => e.lat && e.lng);
@@ -73,9 +86,10 @@ export default function MapView() {
     return SIDE_HEX_COLORS[event.side ?? "neutral"] || SIDE_HEX_COLORS.neutral;
   }, []);
 
-  const hasFilters = side || category || search || onlyMapped || onlyImportant;
+  const hasFilters = side || category || search || onlyMapped || onlyImportant || hidePropaganda;
   const clearFilters = () => {
-    setSide(""); setCategory(""); setSearch(""); setOnlyMapped(false); setOnlyImportant(false);
+    setSide(""); setCategory(""); setSearch("");
+    setOnlyMapped(false); setOnlyImportant(false); setHidePropaganda(false);
   };
 
   return (
@@ -116,10 +130,10 @@ export default function MapView() {
               ))}
             </div>
 
-            {/* Category + geo + alerts */}
-            <div className="flex gap-1.5">
+            {/* Category + geo + alerts + propaganda filter */}
+            <div className="flex gap-1.5 flex-wrap">
               <Select value={category || "_all"} onValueChange={v => setCategory(v === "_all" ? "" : v)}>
-                <SelectTrigger className="flex-1 font-mono text-[10px] bg-background border-border h-7">
+                <SelectTrigger className="flex-1 min-w-[90px] font-mono text-[10px] bg-background border-border h-7">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -150,6 +164,17 @@ export default function MapView() {
                 }`}
               >
                 <Flame className="w-3 h-3 inline" />
+              </button>
+              <button
+                onClick={() => setHidePropaganda(v => !v)}
+                title="Hide high-propaganda content"
+                className={`px-2 rounded text-[9px] font-mono font-bold uppercase transition-colors border h-7 ${
+                  hidePropaganda
+                    ? "bg-violet-500/20 border-violet-500/50 text-violet-400"
+                    : "border-border text-muted-foreground hover:text-violet-400"
+                }`}
+              >
+                <ShieldAlert className="w-3 h-3 inline" />
               </button>
               {hasFilters && (
                 <button onClick={clearFilters} className="px-2 rounded text-[9px] font-mono text-muted-foreground hover:text-destructive transition-colors border border-border h-7">
@@ -192,7 +217,7 @@ export default function MapView() {
                     style={{ borderLeft: `3px solid ${markerColor(event)}` }}
                     onClick={() => setDrawerEvent(event)}
                   >
-                    <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
                       {event.is_important && (
                         <Flame className="w-3 h-3 text-orange-500 shrink-0" />
                       )}
@@ -206,6 +231,13 @@ export default function MapView() {
                       >
                         {event.category}
                       </Badge>
+                      {event.confidence_level && event.confidence_level !== "low" && (
+                        <Badge
+                          className={`text-[8px] font-mono px-1 py-0 border-none text-white ${CONFIDENCE_LEVEL_COLORS[event.confidence_level] ?? "bg-slate-500"}`}
+                        >
+                          {CONFIDENCE_LEVEL_LABELS[event.confidence_level]}
+                        </Badge>
+                      )}
                       <span className="text-[9px] text-muted-foreground ml-auto whitespace-nowrap">
                         {new Date(event.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -248,6 +280,9 @@ export default function MapView() {
               const isSelected = drawerEvent?.id === event.id;
               const isLive = liveEvents.some(e => e.id === event.id);
               const isImportant = !!event.is_important;
+              const opacity = isSelected || isImportant
+                ? 0.95
+                : confidenceOpacity(event.confidence_level);
 
               return (
                 <CircleMarker
@@ -256,7 +291,7 @@ export default function MapView() {
                   radius={isSelected ? 12 : isImportant ? 10 : isLive ? 8 : 6}
                   pathOptions={{
                     fillColor: color,
-                    fillOpacity: isImportant ? 0.95 : isSelected ? 0.95 : 0.75,
+                    fillOpacity: opacity,
                     color: isSelected ? "#ffffff" : isImportant ? "#f97316" : color,
                     weight: isSelected ? 3 : isImportant ? 2.5 : isLive ? 2 : 1,
                   }}
@@ -271,6 +306,11 @@ export default function MapView() {
                         <Badge className={`text-[9px] font-mono border-none text-white ${CATEGORY_COLORS[event.category]}`}>
                           {event.category}
                         </Badge>
+                        {event.confidence_level && event.confidence_level !== "low" && (
+                          <Badge className={`text-[9px] font-mono border-none text-white ${CONFIDENCE_LEVEL_COLORS[event.confidence_level] ?? "bg-slate-500"}`}>
+                            {CONFIDENCE_LEVEL_LABELS[event.confidence_level]}
+                          </Badge>
+                        )}
                         {isImportant && (
                           <Badge className="text-[9px] font-mono border-none bg-orange-500 text-white">⚠ ALERT</Badge>
                         )}
@@ -285,6 +325,9 @@ export default function MapView() {
                         {event.location_name && <div>📍 {event.location_name}</div>}
                         {event.source_name && <div>📡 {event.source_name}</div>}
                         <div>Confidence: {(event.confidence * 100).toFixed(0)}%</div>
+                        {(event.confirmation_count ?? 0) > 0 && (
+                          <div>✓ Confirmed by {event.confirmation_count} source{event.confirmation_count !== 1 ? "s" : ""}</div>
+                        )}
                         <div>{new Date(event.created_at).toLocaleString()}</div>
                       </div>
                       <button
@@ -312,6 +355,19 @@ export default function MapView() {
             <div className="flex items-center gap-2 border-t border-border pt-1.5 mt-1.5">
               <div className="w-3 h-3 rounded-full border-2 border-orange-500" style={{ background: "transparent" }} />
               <span className="text-[10px] font-mono text-orange-400">Alert</span>
+            </div>
+            <div className="border-t border-border pt-1.5 mt-0.5">
+              <p className="text-[9px] font-mono text-muted-foreground mb-1">Opacity = Intel Level</p>
+              <div className="flex gap-1">
+                {(["low","medium","high","verified"] as const).map(l => (
+                  <div
+                    key={l}
+                    className="w-4 h-4 rounded-sm"
+                    title={CONFIDENCE_LEVEL_LABELS[l]}
+                    style={{ background: "#3b82f6", opacity: confidenceOpacity(l) }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>

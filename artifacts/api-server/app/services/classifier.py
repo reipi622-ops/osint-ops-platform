@@ -1,15 +1,17 @@
 """
 Event classifier: returns (category, confidence), (side, side_confidence),
-and importance detection.
+importance detection, propaganda detection, and confidence level.
 
 Side classification (Middle East OSINT context):
   red     — hostile / adversary operations (Hamas, Hezbollah, PIJ, Iran-backed)
   blue    — Israeli / IDF operations and statements
   neutral — civilian, humanitarian, political, international community, unknown
 
-Importance detection:
-  Flags high-value tactical events: airstrikes, rockets, casualties, UAVs,
-  explosions, IDF statements, Hezbollah activity, etc.
+Confidence levels:
+  verified — confirmed by multiple independent sources, high confidence, no propaganda
+  high     — single strong source OR multi-source confirmation
+  medium   — moderate confidence, minimal propaganda
+  low      — default; weak signals or high propaganda risk
 """
 
 from __future__ import annotations
@@ -95,9 +97,6 @@ _NEUTRAL_KEYWORDS = [
 ]
 
 # ── Importance rules ───────────────────────────────────────────────────────────
-# Each rule: (tag, weight, keywords)
-# weight: contribution to importance_score
-# is_important when score >= 0.5
 _IMPORTANCE_RULES: list[tuple[str, float, list[str]]] = [
     ("rockets", 0.70, [
         "rocket", "rockets", "missile", "missiles", "katyusha", "mortar shells",
@@ -153,6 +152,50 @@ _IMPORTANCE_RULES: list[tuple[str, float, list[str]]] = [
 
 _IMPORTANCE_THRESHOLD = 0.50
 
+# ── Propaganda / bias detection ────────────────────────────────────────────────
+# Each entry: (weight, keywords)
+# Total score > 0.5 → high propaganda risk
+_PROPAGANDA_RULES: list[tuple[float, list[str]]] = [
+    (0.40, [
+        # Genocide / extermination framing
+        "genocide", "extermination", "ethnic cleansing", "annihilation",
+        "إبادة جماعية", "إبادة", "تطهير عرقي",
+    ]),
+    (0.35, [
+        # Massacre / atrocity maximalism
+        "massacre", "slaughter", "butcher", "barbaric", "savage attack",
+        "مجزرة", "مذبحة", "ذبح", "جريمة حرب", "همجية",
+    ]),
+    (0.30, [
+        # Dehumanization
+        "zionist entity", "zionist regime", "occupying entity", "settler colonialism",
+        "الكيان الصهيوني", "العدو الصهيوني", "المحتل الصهيوني",
+        "الكيان المحتل", "المستوطنين الصهاينة",
+    ]),
+    (0.25, [
+        # Extreme calls to action / incitement
+        "must be destroyed", "wipe out", "death to", "will be eliminated",
+        "يجب إبادة", "الموت لـ", "سيُمحى", "ستُدمر",
+    ]),
+    (0.20, [
+        # Emotional manipulation superlatives
+        "unprecedented atrocity", "worst crime in history", "criminal occupation",
+        "أشد جرائم التاريخ", "جريمة لا مثيل لها", "الاحتلال الإجرامي",
+    ]),
+    (0.15, [
+        # Martyrdom glorification used as propaganda
+        "glorious martyrdom", "heroic sacrifice", "freedom fighters",
+        "استشهاد مجيد", "تضحية بطولية", "المجاهدون الأبطال",
+    ]),
+]
+
+# ── Media evidence keywords (boosts confidence) ────────────────────────────────
+_MEDIA_CONFIDENCE_KEYWORDS = [
+    "photo", "photos", "video", "footage", "clip", "image", "images",
+    "screenshot", "recorded", "camera", "livestream",
+    "صورة", "صور", "فيديو", "مقطع", "تسجيل", "كاميرا", "لقطة",
+]
+
 
 def classify_event(title: str, description: str = "") -> tuple[str, float]:
     """Return (category, confidence)."""
@@ -171,13 +214,7 @@ def classify_event(title: str, description: str = "") -> tuple[str, float]:
 
 
 def classify_side(title: str, description: str = "") -> tuple[str, float]:
-    """
-    Return (side, confidence) — one of 'red', 'blue', 'neutral'.
-
-    red     — adversary / hostile actor operations
-    blue    — Israeli / IDF operations and statements
-    neutral — civilian, humanitarian, political, international, ambiguous
-    """
+    """Return (side, confidence) — one of 'red', 'blue', 'neutral'."""
     text = f"{title} {description}".lower()
 
     red_score  = sum(1 for kw in _RED_KEYWORDS    if kw.lower() in text)
@@ -203,12 +240,7 @@ def classify_side(title: str, description: str = "") -> tuple[str, float]:
 
 def detect_importance(title: str, description: str = "") -> tuple[bool, float, str]:
     """
-    Detect whether this event is tactically significant.
-
-    Returns:
-        is_important  — True if importance_score >= threshold
-        importance_score — float 0..1 (higher = more important)
-        importance_tags  — comma-separated matched rule tags (e.g. "airstrike,casualties")
+    Returns (is_important, importance_score, importance_tags_csv).
     """
     text = f"{title} {description}".lower()
     matched_tags: list[str] = []
@@ -223,3 +255,73 @@ def detect_importance(title: str, description: str = "") -> tuple[bool, float, s
     is_important = score >= _IMPORTANCE_THRESHOLD
 
     return is_important, round(score, 2), ",".join(matched_tags)
+
+
+def detect_propaganda(text: str) -> float:
+    """
+    Analyse text for propaganda / extreme bias indicators.
+    Returns a score 0.0 (neutral) → 1.0 (heavy propaganda).
+    """
+    lowered = text.lower()
+    score = 0.0
+
+    for weight, keywords in _PROPAGANDA_RULES:
+        if any(kw.lower() in lowered for kw in keywords):
+            score += weight
+
+    # Bonus: excessive exclamation marks → emotional manipulation
+    exclamation_count = text.count("!")
+    if exclamation_count >= 3:
+        score += min(0.20, exclamation_count * 0.04)
+
+    # Bonus: ALL CAPS words (3+ letters, 3+ occurrences) → shouting / hysteria
+    caps_words = [w for w in text.split() if len(w) >= 3 and w.isupper() and w.isalpha()]
+    if len(caps_words) >= 3:
+        score += min(0.15, len(caps_words) * 0.03)
+
+    return round(min(1.0, score), 3)
+
+
+def detect_text_has_media_keywords(text: str) -> bool:
+    """True if the text references media evidence (photo / video / footage)."""
+    lowered = text.lower()
+    return any(kw in lowered for kw in _MEDIA_CONFIDENCE_KEYWORDS)
+
+
+def compute_confidence_level(
+    confidence: float,
+    importance_score: float,
+    confirmation_count: int,
+    has_media: bool,
+    propaganda_score: float,
+) -> str:
+    """
+    Derive an intelligence confidence level from multiple signals.
+
+    verified — 2+ independent sources confirm, confidence ≥ 0.60, low propaganda
+    high     — strong single source (≥0.75) OR confirmed once (≥0.55)
+    medium   — moderate confidence (≥0.45), low propaganda
+    low      — default
+    """
+    # Media evidence boosts effective confidence
+    eff = confidence + (0.10 if has_media else 0.0)
+
+    # Heavy propaganda kills credibility regardless of other signals
+    if propaganda_score >= 0.60:
+        return "low"
+
+    # VERIFIED: multi-source confirmation + adequate confidence
+    if confirmation_count >= 2 and eff >= 0.60 and propaganda_score < 0.40:
+        return "verified"
+
+    # HIGH: very confident single source OR confirmed once
+    if eff >= 0.75 and propaganda_score < 0.50:
+        return "high"
+    if confirmation_count >= 1 and eff >= 0.55 and propaganda_score < 0.50:
+        return "high"
+
+    # MEDIUM: moderate confidence
+    if eff >= 0.45 and propaganda_score < 0.70:
+        return "medium"
+
+    return "low"

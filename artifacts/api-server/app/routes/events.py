@@ -16,6 +16,9 @@ from app.services.event_broadcaster import broadcaster
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/events", tags=["events"])
 
+_VALID_SIDES = {"red", "blue", "neutral"}
+_VALID_LEVELS = {"low", "medium", "high", "verified"}
+
 
 @router.get("/stats", response_model=schemas.DashboardStats)
 async def get_dashboard_stats(db: Session = Depends(get_db)):
@@ -103,16 +106,24 @@ async def events_stream(request: Request):
 @router.get("/alerts", response_model=schemas.EventListResponse)
 async def list_alerts(
     side: Optional[str] = Query(None),
+    confidence_level: Optional[str] = Query(None),
     limit: int = Query(50, le=500),
     db: Session = Depends(get_db),
 ):
     """Return the most recent important/high-priority events."""
+    if side and side not in _VALID_SIDES:
+        raise HTTPException(400, f"Invalid side. Must be one of: {', '.join(_VALID_SIDES)}")
+    if confidence_level and confidence_level not in _VALID_LEVELS:
+        raise HTTPException(400, f"Invalid confidence_level. Must be one of: {', '.join(_VALID_LEVELS)}")
+
     query = (
         db.query(models.Event)
         .filter(models.Event.is_duplicate == False, models.Event.is_important == True)
     )
     if side:
         query = query.filter(models.Event.side == side)
+    if confidence_level:
+        query = query.filter(models.Event.confidence_level == confidence_level)
     total = query.count()
     items = (
         query
@@ -141,12 +152,10 @@ async def get_timeline(
         .all()
     )
 
-    # Bucket by hour
     buckets: dict[str, dict[str, int]] = {}
     for created_at, side in events:
         if created_at is None:
             continue
-        # truncate to hour
         h = created_at.replace(minute=0, second=0, microsecond=0)
         key = h.strftime("%Y-%m-%dT%H:00:00")
         if key not in buckets:
@@ -155,7 +164,6 @@ async def get_timeline(
         buckets[key]["total"] += 1
         buckets[key][s] = buckets[key].get(s, 0) + 1
 
-    # Fill in all hours (even empty ones) for a continuous timeline
     result: list[schemas.HourlyCount] = []
     for i in range(hours - 1, -1, -1):
         h = (now - timedelta(hours=i)).replace(minute=0, second=0, microsecond=0)
@@ -180,16 +188,23 @@ async def list_events(
     source_name: Optional[str] = Query(None),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=200),
     has_location: Optional[bool] = Query(None),
     is_important: Optional[bool] = Query(None),
+    confidence_level: Optional[str] = Query(None),
+    hide_propaganda: Optional[bool] = Query(None),
     lat: Optional[float] = Query(None),
     lng: Optional[float] = Query(None),
-    radius_km: Optional[float] = Query(None),
+    radius_km: Optional[float] = Query(None, le=500),
     limit: int = Query(50, le=500),
-    offset: int = Query(0),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
+    if side and side not in _VALID_SIDES:
+        raise HTTPException(400, f"Invalid side. Must be one of: {', '.join(_VALID_SIDES)}")
+    if confidence_level and confidence_level not in _VALID_LEVELS:
+        raise HTTPException(400, f"Invalid confidence_level. Must be one of: {', '.join(_VALID_LEVELS)}")
+
     query = db.query(models.Event).filter(models.Event.is_duplicate == False)
 
     if category:
@@ -197,7 +212,8 @@ async def list_events(
     if side:
         query = query.filter(models.Event.side == side)
     if source_name:
-        query = query.filter(models.Event.source_name.ilike(f"%{source_name}%"))
+        # Prevent SQL injection via parameterized ilike
+        query = query.filter(models.Event.source_name.ilike(f"%{source_name[:100]}%"))
     if has_location is True:
         query = query.filter(models.Event.lat.isnot(None), models.Event.lng.isnot(None))
     if has_location is False:
@@ -206,6 +222,13 @@ async def list_events(
         query = query.filter(models.Event.is_important == True)
     if is_important is False:
         query = query.filter(models.Event.is_important == False)
+    if confidence_level:
+        query = query.filter(models.Event.confidence_level == confidence_level)
+    if hide_propaganda is True:
+        # Exclude events with high propaganda score
+        query = query.filter(
+            or_(models.Event.propaganda_score.is_(None), models.Event.propaganda_score < 0.50)
+        )
     if source_id:
         query = query.filter(models.Event.source_id == source_id)
     if date_from:
@@ -244,6 +267,8 @@ async def list_events(
 
 @router.get("/{event_id}", response_model=schemas.EventResponse)
 async def get_event(event_id: int, db: Session = Depends(get_db)):
+    if event_id <= 0:
+        raise HTTPException(400, "Invalid event_id")
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -261,7 +286,11 @@ async def create_event(event: schemas.EventInput, db: Session = Depends(get_db))
         is_duplicate=existing is not None,
     )
     db.add(db_event)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(409, "Duplicate event")
     db.refresh(db_event)
 
     from app.schemas import EventResponse

@@ -75,6 +75,12 @@ paths:
         - name: is_important
           in: query
           schema: { type: boolean }
+        - name: confidence_level
+          in: query
+          schema: { type: string, enum: [low, medium, high, verified] }
+        - name: hide_propaganda
+          in: query
+          schema: { type: boolean }
         - name: limit
           in: query
           schema: { type: integer, default: 50 }
@@ -115,6 +121,9 @@ paths:
         - name: side
           in: query
           schema: { type: string, enum: [red, blue, neutral] }
+        - name: confidence_level
+          in: query
+          schema: { type: string, enum: [low, medium, high, verified] }
         - name: limit
           in: query
           schema: { type: integer, default: 50 }
@@ -511,7 +520,24 @@ components:
         status: { type: string }
         version: { type: string }
         database: { type: string }
+        metrics:
+          oneOf:
+            - $ref: "#/components/schemas/SystemMetrics"
+            - type: "null"
       required: [status]
+
+    SystemMetrics:
+      type: object
+      properties:
+        cpu_percent: { type: number }
+        memory_mb: { type: number }
+        memory_percent: { type: number }
+        uptime_seconds: { type: number }
+        sse_subscribers: { type: integer }
+        events_total: { type: integer }
+        events_today: { type: integer }
+        alerts_total: { type: integer }
+      required: [cpu_percent, memory_mb, memory_percent, uptime_seconds, sse_subscribers, events_total, events_today, alerts_total]
 
     EventResponse:
       type: object
@@ -540,6 +566,11 @@ components:
         is_important: { type: boolean, default: false }
         importance_score: { type: number, default: 0.0 }
         importance_tags: { type: ["string", "null"] }
+        confirmation_count: { type: integer, default: 0 }
+        confirming_sources: { type: ["string", "null"] }
+        has_media: { type: boolean, default: false }
+        propaganda_score: { type: number, default: 0.0 }
+        confidence_level: { type: string, enum: [low, medium, high, verified], default: low }
       required: [id, title, category, side, confidence, original_lang, event_hash, is_duplicate, scraped_at, created_at]
 
     EventInput:

@@ -46,7 +46,14 @@ class Event(Base):
     # Importance / alert fields
     is_important = Column(Boolean, default=False, index=True)
     importance_score = Column(Float, default=0.0)
-    importance_tags = Column(String, nullable=True)  # comma-separated tags
+    importance_tags = Column(String, nullable=True)  # comma-separated
+
+    # Intelligence reliability engine fields
+    confirmation_count = Column(Integer, default=0)          # how many sources confirmed
+    confirming_sources = Column(String, nullable=True)        # comma-separated source names
+    has_media = Column(Boolean, default=False)                # had photo/video evidence
+    propaganda_score = Column(Float, default=0.0)            # 0=neutral, 1=heavy propaganda
+    confidence_level = Column(String, default="low", index=True)  # low/medium/high/verified
 
     event_date = Column(DateTime, nullable=True)
     scraped_at = Column(DateTime, default=datetime.utcnow)

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 from typing import Optional, List, Dict
 from datetime import datetime
 
@@ -31,13 +31,6 @@ class SourceResponse(SourceBase):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def reliability_score(self) -> float:
-        """
-        Computed reliability score based on source type.
-        telegram (manually approved + public-verified) → 0.85
-        rss                                            → 0.60
-        web                                            → 0.55
-        other / unknown                                → 0.50
-        """
         _type = getattr(self, "type", "") or ""
         if _type == "telegram":
             return 0.85
@@ -68,6 +61,21 @@ class EventInput(BaseModel):
     is_important: bool = False
     importance_score: float = 0.0
     importance_tags: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("title must not be empty")
+        return v[:1000]  # hard cap
+
+    @field_validator("raw_text", mode="before")
+    @classmethod
+    def cap_raw_text(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return str(v)[:5000]
 
 
 class EventUpdate(BaseModel):
@@ -106,6 +114,12 @@ class EventResponse(BaseModel):
     is_important: bool = False
     importance_score: float = 0.0
     importance_tags: Optional[str] = None
+    # Intelligence reliability fields
+    confirmation_count: int = 0
+    confirming_sources: Optional[str] = None
+    has_media: bool = False
+    propaganda_score: float = 0.0
+    confidence_level: str = "low"
     event_date: Optional[datetime] = None
     scraped_at: datetime
     created_at: datetime
@@ -119,7 +133,7 @@ class EventListResponse(BaseModel):
 
 
 class HourlyCount(BaseModel):
-    hour: str        # ISO timestamp truncated to hour, e.g. "2024-01-01T14:00:00"
+    hour: str
     total: int
     red: int
     blue: int
@@ -164,10 +178,22 @@ class ScraperStatus(BaseModel):
     sources_count: int = 0
 
 
+class SystemMetrics(BaseModel):
+    cpu_percent: float
+    memory_mb: float
+    memory_percent: float
+    uptime_seconds: float
+    sse_subscribers: int
+    events_total: int
+    events_today: int
+    alerts_total: int
+
+
 class HealthStatus(BaseModel):
     status: str
-    version: str = "1.0.0"
+    version: str = "2.0.0"
     database: str = "connected"
+    metrics: Optional[SystemMetrics] = None
 
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
@@ -185,7 +211,6 @@ class TelegramChannelUpdate(BaseModel):
 
 
 class ListenerStatus(BaseModel):
-    """In-memory join/polling status for a Telegram channel (not persisted to DB)."""
     joined: bool = False
     error: Optional[str] = None
     polled_at: Optional[datetime] = None
@@ -205,7 +230,7 @@ class TelegramChannelResponse(BaseModel):
     messages_processed: int
     created_at: datetime
     last_activity_at: Optional[datetime] = None
-    listener_status: Optional[ListenerStatus] = None   # injected by route, not from DB
+    listener_status: Optional[ListenerStatus] = None
 
 
 class TelegramAuthStatus(BaseModel):
