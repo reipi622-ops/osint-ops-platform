@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout";
-import { useState } from "react";
+import { useState, useRef, useEffect, memo } from "react";
+import type { EventResponse } from "@workspace/api-client-react";
 import {
   useGetTelegramAuthStatus,
   useTelegramRequestCode,
@@ -27,7 +28,117 @@ import {
 } from "lucide-react";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import { useToast } from "@/hooks/use-toast";
-import { CATEGORY_COLORS, SIDE_COLORS, SIDE_LABELS } from "@/lib/constants";
+import {
+  CATEGORY_COLORS,
+  SIDE_COLORS,
+  SIDE_LABELS,
+  SIDE_BORDER_COLORS,
+  CONFIDENCE_LEVEL_COLORS,
+} from "@/lib/constants";
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+
+function formatIsraelTime(utcStr: string): string {
+  try {
+    return new Intl.DateTimeFormat("he-IL", {
+      timeZone: "Asia/Jerusalem",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(new Date(utcStr));
+  } catch {
+    return new Date(utcStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+}
+
+function formatIsraelDate(utcStr: string): string {
+  try {
+    return new Intl.DateTimeFormat("he-IL", {
+      timeZone: "Asia/Jerusalem",
+      day: "2-digit",
+      month: "2-digit",
+    }).format(new Date(utcStr));
+  } catch {
+    return "";
+  }
+}
+
+// ── InterceptRow (memoised — only re-renders when event object identity changes) ─
+
+const InterceptRow = memo(function InterceptRow({ ev }: { ev: EventResponse }) {
+  const side = ev.side ?? "neutral";
+  const conf = ev.confidence_level ?? "low";
+  const cat  = ev.category ?? "other";
+  const srcLabel = ev.source_name
+    ? ev.source_name.replace(/^Telegram:\s*/i, "@")
+    : null;
+
+  return (
+    <div
+      className={[
+        "flex gap-2 p-2 rounded-md border-l-[3px] bg-background/60",
+        "border border-border/40 text-sm",
+        "animate-in fade-in slide-in-from-top-2 duration-300 ease-out",
+        SIDE_BORDER_COLORS[side] ?? "border-l-slate-500/40",
+      ].join(" ")}
+    >
+      {/* Timestamp column */}
+      <div className="flex-none flex flex-col items-center justify-start pt-0.5 min-w-[42px]">
+        <span className="text-[10px] font-mono font-bold text-foreground/70 tabular-nums leading-tight">
+          {formatIsraelTime(ev.created_at)}
+        </span>
+        <span className="text-[9px] font-mono text-muted-foreground/50 tabular-nums">
+          {formatIsraelDate(ev.created_at)}
+        </span>
+      </div>
+
+      {/* Content column */}
+      <div className="flex-1 min-w-0 space-y-1">
+        {/* Badge row */}
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge
+            className={`text-[9px] font-mono uppercase px-1 py-0 h-4 border-none text-white shrink-0 ${SIDE_COLORS[side] ?? "bg-slate-500"}`}
+          >
+            {SIDE_LABELS[side] ?? side}
+          </Badge>
+          <Badge
+            className={`text-[9px] font-mono uppercase px-1 py-0 h-4 border-none text-white shrink-0 ${CATEGORY_COLORS[cat] ?? "bg-slate-500"}`}
+          >
+            {cat}
+          </Badge>
+          <Badge
+            className={`text-[9px] font-mono uppercase px-1 py-0 h-4 border-none text-white shrink-0 ${CONFIDENCE_LEVEL_COLORS[conf] ?? "bg-slate-500"}`}
+          >
+            {conf}
+          </Badge>
+          {srcLabel && (
+            <Badge
+              variant="outline"
+              className="text-[9px] font-mono px-1 py-0 h-4 border-border/50 text-muted-foreground max-w-[90px] shrink-0"
+            >
+              <span className="truncate block">{srcLabel}</span>
+            </Badge>
+          )}
+          {ev.location_name && (
+            <span className="text-[9px] font-mono text-muted-foreground/70 truncate max-w-[80px]">
+              📍 {ev.location_name}
+            </span>
+          )}
+        </div>
+
+        {/* Hebrew title — RTL, wraps rather than truncates */}
+        <p
+          dir="rtl"
+          lang="he"
+          className="text-xs font-medium text-foreground/90 line-clamp-2 break-words leading-snug"
+        >
+          {ev.title_he || ev.title || "—"}
+        </p>
+      </div>
+    </div>
+  );
+});
 
 export default function TelegramAdmin() {
   const queryClient = useQueryClient();
@@ -59,7 +170,15 @@ export default function TelegramAdmin() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [fetchingId, setFetchingId]   = useState<number | null>(null);
 
-  const { events, status: liveStatus, messageCount, lastEventAt } = useLiveEvents(30);
+  const { events, status: liveStatus, messageCount, lastEventAt } = useLiveEvents(50);
+
+  // Auto-scroll to top of intercept list whenever a new event arrives
+  const interceptScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (events.length > 0 && interceptScrollRef.current) {
+      interceptScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [events.length]);
 
   const invalidateChannels = () =>
     queryClient.invalidateQueries({ queryKey: getListTelegramChannelsQueryKey() });
@@ -569,82 +688,83 @@ export default function TelegramAdmin() {
 
         {/* ── Live Intercepts feed ─────────────────────────────────────── */}
         {isAuthorized && (
-          <div className="border border-border rounded-lg bg-card flex flex-col h-[320px]">
-            <div className="p-3 border-b border-border bg-muted/20 flex flex-wrap justify-between items-center gap-2">
+          <div className="border border-border rounded-lg bg-card flex flex-col h-[420px] sm:h-[480px]">
+            {/* Header */}
+            <div className="px-3 py-2 border-b border-border bg-muted/20 flex flex-wrap justify-between items-center gap-2 shrink-0">
               <h3 className="font-mono text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                <Radio className="w-4 h-4" />
+                <Radio className="w-3.5 h-3.5" />
                 Live Intercepts
-              </h3>
-              <div className="flex items-center gap-3 text-[10px] font-mono">
-                {/* SSE status */}
-                {liveStatus === "connected" ? (
-                  <span className="flex items-center text-green-500 font-bold">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse mr-1.5" />
-                    SSE CONNECTED
-                  </span>
-                ) : liveStatus === "connecting" ? (
-                  <span className="flex items-center text-yellow-500">
-                    <Activity className="w-3 h-3 mr-1 animate-spin" /> CONNECTING
-                  </span>
-                ) : (
-                  <span className="text-destructive flex items-center gap-1">
-                    <Wifi className="w-3 h-3" /> RECONNECTING...
+                {events.length > 0 && (
+                  <span className="font-normal text-muted-foreground">
+                    ({events.length})
                   </span>
                 )}
-                {/* Debug counters — always visible so issues are obvious */}
-                <span className="text-border">|</span>
+              </h3>
+
+              <div className="flex items-center gap-2 text-[10px] font-mono flex-wrap">
+                {/* SSE connection state */}
+                {liveStatus === "connected" ? (
+                  <span className="flex items-center gap-1 text-green-500 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    LIVE
+                  </span>
+                ) : liveStatus === "connecting" ? (
+                  <span className="flex items-center gap-1 text-yellow-500">
+                    <Activity className="w-3 h-3 animate-spin" />
+                    CONNECTING
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-destructive">
+                    <WifiOff className="w-3 h-3" />
+                    RECONNECTING
+                  </span>
+                )}
+
+                <span className="text-border/60">|</span>
+
+                {/* Event counter */}
                 <span className="text-muted-foreground">
-                  <span className="text-foreground font-bold">{messageCount}</span> received
+                  <span className="text-foreground font-bold">{messageCount}</span> recv
                 </span>
+
+                {/* Timestamp of last event */}
                 {lastEventAt && (
                   <>
-                    <span className="text-border">|</span>
+                    <span className="text-border/60">|</span>
                     <span className="text-muted-foreground">
-                      last: <span className="text-foreground">{lastEventAt.toLocaleTimeString()}</span>
+                      last{" "}
+                      <span className="text-foreground">
+                        {lastEventAt.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </span>
                     </span>
                   </>
                 )}
+
+                {/* Timezone label */}
+                <span className="text-muted-foreground/50 hidden sm:inline">IL time</span>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {/* Scroll body */}
+            <div
+              ref={interceptScrollRef}
+              className="flex-1 overflow-y-auto overscroll-contain p-2 space-y-1.5 scroll-smooth"
+            >
               {events.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-xs font-mono">
-                  <Radio className="w-6 h-6 mb-2 opacity-30" />
-                  <p className="italic opacity-50">Waiting for intercepts from approved channels...</p>
-                  <p className="text-[10px] opacity-30 mt-1">Use "TEST FETCH" on a channel to trigger immediately</p>
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-xs font-mono select-none">
+                  <Radio className="w-7 h-7 mb-2 opacity-20" />
+                  <p className="italic opacity-40">Waiting for intercepts…</p>
+                  <p className="text-[10px] opacity-25 mt-1">
+                    Use &ldquo;TEST FETCH&rdquo; on any approved channel to trigger immediately
+                  </p>
                 </div>
               ) : (
-                events.map((event, i) => (
-                  <div key={event.id || i}
-                    className="flex gap-3 p-2.5 rounded bg-background border border-border/50 text-sm animate-in fade-in slide-in-from-bottom-1 duration-200">
-                    <div className="flex-none text-[10px] font-mono text-muted-foreground w-14 pt-0.5">
-                      {new Date(event.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Badge className={`text-[8px] font-mono uppercase px-1 py-0 border-none text-white ${SIDE_COLORS[event.side ?? "neutral"]}`}>
-                          {SIDE_LABELS[event.side ?? "neutral"]}
-                        </Badge>
-                        <Badge className={`text-[8px] font-mono uppercase px-1 py-0 border-none text-white ${CATEGORY_COLORS[event.category || "other"]}`}>
-                          {event.category || "other"}
-                        </Badge>
-                        {event.location_name && (
-                          <span className="text-[9px] font-mono text-muted-foreground truncate">
-                            📍 {event.location_name}
-                          </span>
-                        )}
-                        {event.source_name && (
-                          <span className="text-[9px] font-mono text-muted-foreground ml-auto shrink-0">
-                            {event.source_name.replace("Telegram: ", "@")}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs font-medium text-foreground/90 truncate" dir="rtl">
-                        {event.title_he || event.title}
-                      </p>
-                    </div>
-                  </div>
+                events.map((ev) => (
+                  <InterceptRow key={ev.id} ev={ev} />
                 ))
               )}
             </div>
