@@ -61,6 +61,7 @@ export const listEventsResponseItemsItemConfirmationCountDefault = 0;
 export const listEventsResponseItemsItemHasMediaDefault = false;
 export const listEventsResponseItemsItemPropagandaScoreDefault = 0;
 export const listEventsResponseItemsItemConfidenceLevelDefault = `low`;
+export const listEventsResponseItemsItemEscalationLevelDefault = `low`;
 
 export const ListEventsResponse = zod.object({
   "items": zod.array(zod.object({
@@ -92,7 +93,8 @@ export const ListEventsResponse = zod.object({
   "confirming_sources": zod.string().nullish(),
   "has_media": zod.boolean().default(listEventsResponseItemsItemHasMediaDefault),
   "propaganda_score": zod.number().default(listEventsResponseItemsItemPropagandaScoreDefault),
-  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(listEventsResponseItemsItemConfidenceLevelDefault)
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(listEventsResponseItemsItemConfidenceLevelDefault),
+  "escalation_level": zod.enum(['low', 'medium', 'high', 'critical']).default(listEventsResponseItemsItemEscalationLevelDefault)
 })),
   "total": zod.number(),
   "offset": zod.number(),
@@ -127,6 +129,69 @@ export const CreateEventBody = zod.object({
 
 
 /**
+ * @summary Export events as JSON or CSV
+ */
+export const exportEventsQueryFormatDefault = `json`;
+export const exportEventsQueryLimitDefault = 1000;
+export const exportEventsQueryLimitMax = 5000;
+
+
+
+export const ExportEventsQueryParams = zod.object({
+  "format": zod.enum(['json', 'csv']).default(exportEventsQueryFormatDefault),
+  "side": zod.enum(['red', 'blue', 'neutral']).optional(),
+  "category": zod.coerce.string().optional(),
+  "is_important": zod.coerce.boolean().optional(),
+  "date_from": zod.date().optional(),
+  "date_to": zod.date().optional(),
+  "limit": zod.coerce.number().max(exportEventsQueryLimitMax).default(exportEventsQueryLimitDefault)
+})
+
+export const exportEventsResponseSideDefault = `neutral`;
+export const exportEventsResponseIsImportantDefault = false;
+export const exportEventsResponseImportanceScoreDefault = 0;
+export const exportEventsResponseConfirmationCountDefault = 0;
+export const exportEventsResponseHasMediaDefault = false;
+export const exportEventsResponsePropagandaScoreDefault = 0;
+export const exportEventsResponseConfidenceLevelDefault = `low`;
+export const exportEventsResponseEscalationLevelDefault = `low`;
+
+export const ExportEventsResponseItem = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "title_he": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "description_he": zod.string().nullish(),
+  "category": zod.string(),
+  "side": zod.enum(['red', 'blue', 'neutral']).default(exportEventsResponseSideDefault),
+  "confidence": zod.number(),
+  "source_id": zod.number().nullish(),
+  "source_name": zod.string().nullish(),
+  "source_url": zod.string().nullish(),
+  "location_name": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish(),
+  "original_lang": zod.string(),
+  "raw_text": zod.string().nullish(),
+  "event_hash": zod.string(),
+  "is_duplicate": zod.boolean(),
+  "scraped_at": zod.coerce.date(),
+  "created_at": zod.coerce.date(),
+  "event_date": zod.coerce.date().nullish(),
+  "is_important": zod.boolean().default(exportEventsResponseIsImportantDefault),
+  "importance_score": zod.number().default(exportEventsResponseImportanceScoreDefault),
+  "importance_tags": zod.string().nullish(),
+  "confirmation_count": zod.number().default(exportEventsResponseConfirmationCountDefault),
+  "confirming_sources": zod.string().nullish(),
+  "has_media": zod.boolean().default(exportEventsResponseHasMediaDefault),
+  "propaganda_score": zod.number().default(exportEventsResponsePropagandaScoreDefault),
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(exportEventsResponseConfidenceLevelDefault),
+  "escalation_level": zod.enum(['low', 'medium', 'high', 'critical']).default(exportEventsResponseEscalationLevelDefault)
+})
+export const ExportEventsResponse = zod.array(ExportEventsResponseItem)
+
+
+/**
  * @summary List important/high-priority events
  */
 export const listAlertsQueryLimitDefault = 50;
@@ -144,6 +209,7 @@ export const listAlertsResponseItemsItemConfirmationCountDefault = 0;
 export const listAlertsResponseItemsItemHasMediaDefault = false;
 export const listAlertsResponseItemsItemPropagandaScoreDefault = 0;
 export const listAlertsResponseItemsItemConfidenceLevelDefault = `low`;
+export const listAlertsResponseItemsItemEscalationLevelDefault = `low`;
 
 export const ListAlertsResponse = zod.object({
   "items": zod.array(zod.object({
@@ -175,7 +241,8 @@ export const ListAlertsResponse = zod.object({
   "confirming_sources": zod.string().nullish(),
   "has_media": zod.boolean().default(listAlertsResponseItemsItemHasMediaDefault),
   "propaganda_score": zod.number().default(listAlertsResponseItemsItemPropagandaScoreDefault),
-  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(listAlertsResponseItemsItemConfidenceLevelDefault)
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(listAlertsResponseItemsItemConfidenceLevelDefault),
+  "escalation_level": zod.enum(['low', 'medium', 'high', 'critical']).default(listAlertsResponseItemsItemEscalationLevelDefault)
 })),
   "total": zod.number(),
   "offset": zod.number(),
@@ -244,6 +311,7 @@ export const getEventResponseConfirmationCountDefault = 0;
 export const getEventResponseHasMediaDefault = false;
 export const getEventResponsePropagandaScoreDefault = 0;
 export const getEventResponseConfidenceLevelDefault = `low`;
+export const getEventResponseEscalationLevelDefault = `low`;
 
 export const GetEventResponse = zod.object({
   "id": zod.number(),
@@ -274,7 +342,8 @@ export const GetEventResponse = zod.object({
   "confirming_sources": zod.string().nullish(),
   "has_media": zod.boolean().default(getEventResponseHasMediaDefault),
   "propaganda_score": zod.number().default(getEventResponsePropagandaScoreDefault),
-  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(getEventResponseConfidenceLevelDefault)
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(getEventResponseConfidenceLevelDefault),
+  "escalation_level": zod.enum(['low', 'medium', 'high', 'critical']).default(getEventResponseEscalationLevelDefault)
 })
 
 
@@ -303,6 +372,7 @@ export const updateEventResponseConfirmationCountDefault = 0;
 export const updateEventResponseHasMediaDefault = false;
 export const updateEventResponsePropagandaScoreDefault = 0;
 export const updateEventResponseConfidenceLevelDefault = `low`;
+export const updateEventResponseEscalationLevelDefault = `low`;
 
 export const UpdateEventResponse = zod.object({
   "id": zod.number(),
@@ -333,7 +403,8 @@ export const UpdateEventResponse = zod.object({
   "confirming_sources": zod.string().nullish(),
   "has_media": zod.boolean().default(updateEventResponseHasMediaDefault),
   "propaganda_score": zod.number().default(updateEventResponsePropagandaScoreDefault),
-  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(updateEventResponseConfidenceLevelDefault)
+  "confidence_level": zod.enum(['low', 'medium', 'high', 'verified']).default(updateEventResponseConfidenceLevelDefault),
+  "escalation_level": zod.enum(['low', 'medium', 'high', 'critical']).default(updateEventResponseEscalationLevelDefault)
 })
 
 
@@ -378,6 +449,47 @@ export const CreateSourceBody = zod.object({
 
 
 /**
+ * @summary Get detailed reliability and activity statistics for a source
+ */
+export const GetSourceStatsParams = zod.object({
+  "sourceId": zod.coerce.number()
+})
+
+export const getSourceStatsResponseHourlyActivityItemHourMin = 0;
+export const getSourceStatsResponseHourlyActivityItemHourMax = 23;
+
+
+
+export const GetSourceStatsResponse = zod.object({
+  "source_id": zod.number(),
+  "source_name": zod.string(),
+  "source_type": zod.string(),
+  "total_events": zod.number(),
+  "avg_confidence": zod.number(),
+  "avg_propaganda": zod.number(),
+  "avg_importance": zod.number(),
+  "important_events": zod.number(),
+  "reliability_score": zod.number(),
+  "reliability_history": zod.array(zod.object({
+  "date": zod.string(),
+  "avg_confidence": zod.number(),
+  "avg_propaganda": zod.number(),
+  "event_count": zod.number()
+})),
+  "propaganda_trend": zod.array(zod.object({
+  "date": zod.string(),
+  "avg_propaganda": zod.number(),
+  "event_count": zod.number()
+})),
+  "hourly_activity": zod.array(zod.object({
+  "hour": zod.number().min(getSourceStatsResponseHourlyActivityItemHourMin).max(getSourceStatsResponseHourlyActivityItemHourMax),
+  "count": zod.number()
+})),
+  "avg_first_report_seconds": zod.number().nullish()
+})
+
+
+/**
  * @summary Update source
  */
 export const UpdateSourceParams = zod.object({
@@ -411,6 +523,67 @@ export const UpdateSourceResponse = zod.object({
  */
 export const DeleteSourceParams = zod.object({
   "sourceId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List active intelligence patterns (spike, escalation, coordinated)
+ */
+export const ListPatternsResponse = zod.object({
+  "patterns": zod.array(zod.object({
+  "type": zod.enum(['spike', 'escalation', 'coordinated']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "description": zod.string(),
+  "location_hint": zod.string().nullish(),
+  "event_ids": zod.array(zod.number()),
+  "detected_at": zod.string(),
+  "expires_at": zod.string()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary List geographic event clusters from the past 24 hours
+ */
+export const ListGeoClustersResponse = zod.object({
+  "clusters": zod.array(zod.object({
+  "grid_lat": zod.number(),
+  "grid_lng": zod.number(),
+  "center_lat": zod.number(),
+  "center_lng": zod.number(),
+  "radius_km": zod.number(),
+  "event_count": zod.number(),
+  "dominant_side": zod.enum(['red', 'blue', 'neutral']),
+  "last_event_at": zod.string().nullish(),
+  "threat_level": zod.enum(['low', 'medium', 'high', 'critical']),
+  "event_ids": zod.array(zod.number()),
+  "is_hotzone": zod.boolean()
+})),
+  "total": zod.number(),
+  "hotzones": zod.number()
+})
+
+
+/**
+ * @summary List hot zones — clusters with ≥4 events in the past 24 hours
+ */
+export const ListGeoHotzonesResponse = zod.object({
+  "clusters": zod.array(zod.object({
+  "grid_lat": zod.number(),
+  "grid_lng": zod.number(),
+  "center_lat": zod.number(),
+  "center_lng": zod.number(),
+  "radius_km": zod.number(),
+  "event_count": zod.number(),
+  "dominant_side": zod.enum(['red', 'blue', 'neutral']),
+  "last_event_at": zod.string().nullish(),
+  "threat_level": zod.enum(['low', 'medium', 'high', 'critical']),
+  "event_ids": zod.array(zod.number()),
+  "is_hotzone": zod.boolean()
+})),
+  "total": zod.number(),
+  "hotzones": zod.number()
 })
 
 

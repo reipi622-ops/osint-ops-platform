@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EventResponseConfidenceLevel } from './eventResponseConfidenceLevel';
+import type { EventResponseEscalationLevel } from './eventResponseEscalationLevel';
 import type { EventResponseSide } from './eventResponseSide';
 
 export interface EventResponse {
@@ -51,4 +52,5 @@ export interface EventResponse {
   has_media?: boolean;
   propaganda_score?: number;
   confidence_level?: EventResponseConfidenceLevel;
+  escalation_level?: EventResponseEscalationLevel;
 }

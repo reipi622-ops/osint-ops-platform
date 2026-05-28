@@ -42,6 +42,16 @@ export const EventResponseConfidenceLevel = {
   verified: 'verified',
 } as const;
 
+export type EventResponseEscalationLevel = typeof EventResponseEscalationLevel[keyof typeof EventResponseEscalationLevel];
+
+
+export const EventResponseEscalationLevel = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
 export interface EventResponse {
   id: number;
   title: string;
@@ -85,6 +95,7 @@ export interface EventResponse {
   has_media?: boolean;
   propaganda_score?: number;
   confidence_level?: EventResponseConfidenceLevel;
+  escalation_level?: EventResponseEscalationLevel;
 }
 
 export interface EventInput {
@@ -267,6 +278,120 @@ export interface EventTimelineResponse {
   window_hours: number;
 }
 
+export type PatternAlertType = typeof PatternAlertType[keyof typeof PatternAlertType];
+
+
+export const PatternAlertType = {
+  spike: 'spike',
+  escalation: 'escalation',
+  coordinated: 'coordinated',
+} as const;
+
+export type PatternAlertSeverity = typeof PatternAlertSeverity[keyof typeof PatternAlertSeverity];
+
+
+export const PatternAlertSeverity = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
+export interface PatternAlert {
+  type: PatternAlertType;
+  severity: PatternAlertSeverity;
+  description: string;
+  /** @nullable */
+  location_hint?: string | null;
+  event_ids: number[];
+  detected_at: string;
+  expires_at: string;
+}
+
+export interface PatternListResponse {
+  patterns: PatternAlert[];
+  total: number;
+}
+
+export type GeoClusterDominantSide = typeof GeoClusterDominantSide[keyof typeof GeoClusterDominantSide];
+
+
+export const GeoClusterDominantSide = {
+  red: 'red',
+  blue: 'blue',
+  neutral: 'neutral',
+} as const;
+
+export type GeoClusterThreatLevel = typeof GeoClusterThreatLevel[keyof typeof GeoClusterThreatLevel];
+
+
+export const GeoClusterThreatLevel = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
+export interface GeoCluster {
+  grid_lat: number;
+  grid_lng: number;
+  center_lat: number;
+  center_lng: number;
+  radius_km: number;
+  event_count: number;
+  dominant_side: GeoClusterDominantSide;
+  /** @nullable */
+  last_event_at?: string | null;
+  threat_level: GeoClusterThreatLevel;
+  event_ids: number[];
+  is_hotzone: boolean;
+}
+
+export interface GeoClusterListResponse {
+  clusters: GeoCluster[];
+  total: number;
+  hotzones: number;
+}
+
+export interface ReliabilityPoint {
+  date: string;
+  avg_confidence: number;
+  avg_propaganda: number;
+  event_count: number;
+}
+
+export interface PropagandaTrend {
+  date: string;
+  avg_propaganda: number;
+  event_count: number;
+}
+
+export interface HourlyActivity {
+  /**
+     * @minimum 0
+     * @maximum 23
+     */
+  hour: number;
+  count: number;
+}
+
+export interface SourceStats {
+  source_id: number;
+  source_name: string;
+  source_type: string;
+  total_events: number;
+  avg_confidence: number;
+  avg_propaganda: number;
+  avg_importance: number;
+  important_events: number;
+  reliability_score: number;
+  reliability_history: ReliabilityPoint[];
+  propaganda_trend: PropagandaTrend[];
+  hourly_activity: HourlyActivity[];
+  /** @nullable */
+  avg_first_report_seconds?: number | null;
+}
+
 export type ListEventsParams = {
 category?: string;
 side?: ListEventsSide;
@@ -303,6 +428,36 @@ export const ListEventsConfidenceLevel = {
   medium: 'medium',
   high: 'high',
   verified: 'verified',
+} as const;
+
+export type ExportEventsParams = {
+format?: ExportEventsFormat;
+side?: ExportEventsSide;
+category?: string;
+is_important?: boolean;
+date_from?: string;
+date_to?: string;
+/**
+ * @maximum 5000
+ */
+limit?: number;
+};
+
+export type ExportEventsFormat = typeof ExportEventsFormat[keyof typeof ExportEventsFormat];
+
+
+export const ExportEventsFormat = {
+  json: 'json',
+  csv: 'csv',
+} as const;
+
+export type ExportEventsSide = typeof ExportEventsSide[keyof typeof ExportEventsSide];
+
+
+export const ExportEventsSide = {
+  red: 'red',
+  blue: 'blue',
+  neutral: 'neutral',
 } as const;
 
 export type ListAlertsParams = {

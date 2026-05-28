@@ -18,6 +18,10 @@ tags:
     description: Scraper control
   - name: telegram
     description: Telegram channel monitoring and authentication
+  - name: patterns
+    description: Intelligence pattern detection
+  - name: geo
+    description: Geographic intelligence and clustering
 paths:
   /healthz:
     get:
@@ -111,6 +115,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EventResponse"
+
+  /events/export:
+    get:
+      operationId: exportEvents
+      tags: [events]
+      summary: Export events as JSON or CSV
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: side
+          in: query
+          schema: { type: string, enum: [red, blue, neutral] }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: is_important
+          in: query
+          schema: { type: boolean }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 1000, maximum: 5000 }
+      responses:
+        "200":
+          description: Exported data (JSON array or CSV)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventResponse"
+            text/csv:
+              schema:
+                type: string
 
   /events/alerts:
     get:
@@ -251,6 +295,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/SourceResponse"
 
+  /sources/{sourceId}/stats:
+    get:
+      operationId: getSourceStats
+      tags: [sources]
+      summary: Get detailed reliability and activity statistics for a source
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Source statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceStats"
+        "404":
+          description: Not found
+
   /sources/{sourceId}:
     put:
       operationId: updateSource
@@ -286,6 +350,45 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /patterns:
+    get:
+      operationId: listPatterns
+      tags: [patterns]
+      summary: List active intelligence patterns (spike, escalation, coordinated)
+      responses:
+        "200":
+          description: Active patterns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatternListResponse"
+
+  /geo/clusters:
+    get:
+      operationId: listGeoClusters
+      tags: [geo]
+      summary: List geographic event clusters from the past 24 hours
+      responses:
+        "200":
+          description: Geographic clusters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoClusterListResponse"
+
+  /geo/hotzone:
+    get:
+      operationId: listGeoHotzones
+      tags: [geo]
+      summary: List hot zones — clusters with ≥4 events in the past 24 hours
+      responses:
+        "200":
+          description: Hot zones
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoClusterListResponse"
 
   /scraper/status:
     get:
@@ -571,6 +674,7 @@ components:
         has_media: { type: boolean, default: false }
         propaganda_score: { type: number, default: 0.0 }
         confidence_level: { type: string, enum: [low, medium, high, verified], default: low }
+        escalation_level: { type: string, enum: [low, medium, high, critical], default: low }
       required: [id, title, category, side, confidence, original_lang, event_hash, is_duplicate, scraped_at, created_at]
 
     EventInput:
@@ -797,3 +901,107 @@ components:
             $ref: "#/components/schemas/HourlyCount"
         window_hours: { type: integer }
       required: [hours, window_hours]
+
+    PatternAlert:
+      type: object
+      properties:
+        type: { type: string, enum: [spike, escalation, coordinated] }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        description: { type: string }
+        location_hint: { type: ["string", "null"] }
+        event_ids:
+          type: array
+          items: { type: integer }
+        detected_at: { type: string }
+        expires_at: { type: string }
+      required: [type, severity, description, event_ids, detected_at, expires_at]
+
+    PatternListResponse:
+      type: object
+      properties:
+        patterns:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternAlert"
+        total: { type: integer }
+      required: [patterns, total]
+
+    GeoCluster:
+      type: object
+      properties:
+        grid_lat: { type: number }
+        grid_lng: { type: number }
+        center_lat: { type: number }
+        center_lng: { type: number }
+        radius_km: { type: number }
+        event_count: { type: integer }
+        dominant_side: { type: string, enum: [red, blue, neutral] }
+        last_event_at: { type: ["string", "null"] }
+        threat_level: { type: string, enum: [low, medium, high, critical] }
+        event_ids:
+          type: array
+          items: { type: integer }
+        is_hotzone: { type: boolean }
+      required: [grid_lat, grid_lng, center_lat, center_lng, radius_km, event_count, dominant_side, threat_level, event_ids, is_hotzone]
+
+    GeoClusterListResponse:
+      type: object
+      properties:
+        clusters:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeoCluster"
+        total: { type: integer }
+        hotzones: { type: integer }
+      required: [clusters, total, hotzones]
+
+    ReliabilityPoint:
+      type: object
+      properties:
+        date: { type: string }
+        avg_confidence: { type: number }
+        avg_propaganda: { type: number }
+        event_count: { type: integer }
+      required: [date, avg_confidence, avg_propaganda, event_count]
+
+    PropagandaTrend:
+      type: object
+      properties:
+        date: { type: string }
+        avg_propaganda: { type: number }
+        event_count: { type: integer }
+      required: [date, avg_propaganda, event_count]
+
+    HourlyActivity:
+      type: object
+      properties:
+        hour: { type: integer, minimum: 0, maximum: 23 }
+        count: { type: integer }
+      required: [hour, count]
+
+    SourceStats:
+      type: object
+      properties:
+        source_id: { type: integer }
+        source_name: { type: string }
+        source_type: { type: string }
+        total_events: { type: integer }
+        avg_confidence: { type: number }
+        avg_propaganda: { type: number }
+        avg_importance: { type: number }
+        important_events: { type: integer }
+        reliability_score: { type: number }
+        reliability_history:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReliabilityPoint"
+        propaganda_trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/PropagandaTrend"
+        hourly_activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/HourlyActivity"
+        avg_first_report_seconds: { type: ["number", "null"] }
+      required: [source_id, source_name, source_type, total_events, avg_confidence, avg_propaganda, avg_importance, important_events, reliability_score, reliability_history, propaganda_trend, hourly_activity]

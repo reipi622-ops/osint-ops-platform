@@ -26,13 +26,17 @@ import type {
   EventResponse,
   EventTimelineResponse,
   EventUpdate,
+  ExportEventsParams,
+  GeoClusterListResponse,
   GetEventsTimelineParams,
   HealthStatus,
   ListAlertsParams,
   ListEventsParams,
+  PatternListResponse,
   ScraperStatus,
   SourceInput,
   SourceResponse,
+  SourceStats,
   SourceUpdate,
   TelegramAuthStatus,
   TelegramChannelInput,
@@ -290,6 +294,90 @@ export const useCreateEvent = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateEventMutationOptions(options));
     }
+
+export const getExportEventsUrl = (params?: ExportEventsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/events/export?${stringifiedParams}` : `/api/events/export`
+}
+
+/**
+ * @summary Export events as JSON or CSV
+ */
+export const exportEvents = async (params?: ExportEventsParams, options?: RequestInit): Promise<EventResponse[] | string> => {
+
+  return customFetch<EventResponse[] | string>(getExportEventsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportEventsQueryKey = (params?: ExportEventsParams,) => {
+    return [
+    `/api/events/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportEventsQueryOptions = <TData = Awaited<ReturnType<typeof exportEvents>>, TError = ErrorType<unknown>>(params?: ExportEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportEventsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportEvents>>> = ({ signal }) => exportEvents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportEventsQueryResult = NonNullable<Awaited<ReturnType<typeof exportEvents>>>
+export type ExportEventsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Export events as JSON or CSV
+ */
+
+export function useExportEvents<TData = Awaited<ReturnType<typeof exportEvents>>, TError = ErrorType<unknown>>(
+ params?: ExportEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportEventsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListAlertsUrl = (params?: ListAlertsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -903,6 +991,83 @@ export const useCreateSource = <TError = ErrorType<unknown>,
       return useMutation(getCreateSourceMutationOptions(options));
     }
 
+export const getGetSourceStatsUrl = (sourceId: number,) => {
+
+
+
+
+  return `/api/sources/${sourceId}/stats`
+}
+
+/**
+ * @summary Get detailed reliability and activity statistics for a source
+ */
+export const getSourceStats = async (sourceId: number, options?: RequestInit): Promise<SourceStats> => {
+
+  return customFetch<SourceStats>(getGetSourceStatsUrl(sourceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSourceStatsQueryKey = (sourceId: number,) => {
+    return [
+    `/api/sources/${sourceId}/stats`
+    ] as const;
+    }
+
+
+export const getGetSourceStatsQueryOptions = <TData = Awaited<ReturnType<typeof getSourceStats>>, TError = ErrorType<void>>(sourceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSourceStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSourceStatsQueryKey(sourceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSourceStats>>> = ({ signal }) => getSourceStats(sourceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(sourceId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSourceStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSourceStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getSourceStats>>>
+export type GetSourceStatsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get detailed reliability and activity statistics for a source
+ */
+
+export function useGetSourceStats<TData = Awaited<ReturnType<typeof getSourceStats>>, TError = ErrorType<void>>(
+ sourceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSourceStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSourceStatsQueryOptions(sourceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getUpdateSourceUrl = (sourceId: number,) => {
 
 
@@ -1044,6 +1209,237 @@ export const useDeleteSource = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteSourceMutationOptions(options));
     }
+
+export const getListPatternsUrl = () => {
+
+
+
+
+  return `/api/patterns`
+}
+
+/**
+ * @summary List active intelligence patterns (spike, escalation, coordinated)
+ */
+export const listPatterns = async ( options?: RequestInit): Promise<PatternListResponse> => {
+
+  return customFetch<PatternListResponse>(getListPatternsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPatternsQueryKey = () => {
+    return [
+    `/api/patterns`
+    ] as const;
+    }
+
+
+export const getListPatternsQueryOptions = <TData = Awaited<ReturnType<typeof listPatterns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPatternsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPatterns>>> = ({ signal }) => listPatterns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPatterns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPatternsQueryResult = NonNullable<Awaited<ReturnType<typeof listPatterns>>>
+export type ListPatternsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List active intelligence patterns (spike, escalation, coordinated)
+ */
+
+export function useListPatterns<TData = Awaited<ReturnType<typeof listPatterns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPatternsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListGeoClustersUrl = () => {
+
+
+
+
+  return `/api/geo/clusters`
+}
+
+/**
+ * @summary List geographic event clusters from the past 24 hours
+ */
+export const listGeoClusters = async ( options?: RequestInit): Promise<GeoClusterListResponse> => {
+
+  return customFetch<GeoClusterListResponse>(getListGeoClustersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListGeoClustersQueryKey = () => {
+    return [
+    `/api/geo/clusters`
+    ] as const;
+    }
+
+
+export const getListGeoClustersQueryOptions = <TData = Awaited<ReturnType<typeof listGeoClusters>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGeoClusters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListGeoClustersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listGeoClusters>>> = ({ signal }) => listGeoClusters({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listGeoClusters>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListGeoClustersQueryResult = NonNullable<Awaited<ReturnType<typeof listGeoClusters>>>
+export type ListGeoClustersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List geographic event clusters from the past 24 hours
+ */
+
+export function useListGeoClusters<TData = Awaited<ReturnType<typeof listGeoClusters>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGeoClusters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListGeoClustersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListGeoHotzonesUrl = () => {
+
+
+
+
+  return `/api/geo/hotzone`
+}
+
+/**
+ * @summary List hot zones — clusters with ≥4 events in the past 24 hours
+ */
+export const listGeoHotzones = async ( options?: RequestInit): Promise<GeoClusterListResponse> => {
+
+  return customFetch<GeoClusterListResponse>(getListGeoHotzonesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListGeoHotzonesQueryKey = () => {
+    return [
+    `/api/geo/hotzone`
+    ] as const;
+    }
+
+
+export const getListGeoHotzonesQueryOptions = <TData = Awaited<ReturnType<typeof listGeoHotzones>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGeoHotzones>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListGeoHotzonesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listGeoHotzones>>> = ({ signal }) => listGeoHotzones({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listGeoHotzones>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListGeoHotzonesQueryResult = NonNullable<Awaited<ReturnType<typeof listGeoHotzones>>>
+export type ListGeoHotzonesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List hot zones — clusters with ≥4 events in the past 24 hours
+ */
+
+export function useListGeoHotzones<TData = Awaited<ReturnType<typeof listGeoHotzones>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGeoHotzones>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListGeoHotzonesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetScraperStatusUrl = () => {
 
