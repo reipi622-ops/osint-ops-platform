@@ -573,7 +573,17 @@ def _process_message_sync(
             ch.last_message_id = message_id
 
         source.last_scraped_at = now
-        db.commit()
+        try:
+            db.commit()
+        except Exception as commit_exc:
+            # Race between live handler and polling — same message, both saw no existing row.
+            # Treat as harmless duplicate and bail out silently.
+            db.rollback()
+            logger.debug(
+                "Telegram: duplicate insert skipped (race condition) msg_id=%s @%s: %s",
+                message_id, channel_username, commit_exc,
+            )
+            return
         db.refresh(ev)
 
         _status["messages_processed"] += 1

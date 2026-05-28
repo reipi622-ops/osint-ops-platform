@@ -5,6 +5,7 @@
  * OSINT Platform API - collects and analyzes events from Arabic news sources
  * OpenAPI spec version: 1.0.0
  */
+import type { ListenerStatus } from './listenerStatus';
 
 export interface TelegramChannelResponse {
   id: number;
@@ -23,4 +24,5 @@ export interface TelegramChannelResponse {
   created_at: Date;
   /** @nullable */
   last_activity_at?: Date | null;
+  listener_status?: ListenerStatus | null;
 }

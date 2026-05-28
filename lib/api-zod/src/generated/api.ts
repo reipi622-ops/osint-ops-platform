@@ -299,6 +299,9 @@ export const TriggerScraperResponse = zod.object({
 /**
  * @summary Get Telegram authentication and monitor status
  */
+export const getTelegramAuthStatusResponseMessagesRejectedDefault = 0;
+export const getTelegramAuthStatusResponseRawUpdatesReceivedDefault = 0;
+
 export const GetTelegramAuthStatusResponse = zod.object({
   "configured": zod.boolean(),
   "connected": zod.boolean(),
@@ -307,6 +310,8 @@ export const GetTelegramAuthStatusResponse = zod.object({
   "monitoring": zod.boolean(),
   "channels_active": zod.number(),
   "messages_processed": zod.number(),
+  "messages_rejected": zod.number().default(getTelegramAuthStatusResponseMessagesRejectedDefault),
+  "raw_updates_received": zod.number().default(getTelegramAuthStatusResponseRawUpdatesReceivedDefault),
   "last_message_at": zod.coerce.date().nullish(),
   "error": zod.string().nullish()
 })
@@ -363,7 +368,12 @@ export const ListTelegramChannelsResponseItem = zod.object({
   "last_message_id": zod.number(),
   "messages_processed": zod.number(),
   "created_at": zod.coerce.date(),
-  "last_activity_at": zod.coerce.date().nullish()
+  "last_activity_at": zod.coerce.date().nullish(),
+  "listener_status": zod.union([zod.object({
+  "joined": zod.boolean(),
+  "error": zod.string().nullish(),
+  "polled_at": zod.coerce.date().nullish()
+}),zod.null()]).optional()
 })
 export const ListTelegramChannelsResponse = zod.array(ListTelegramChannelsResponseItem)
 
@@ -399,7 +409,25 @@ export const ApproveTelegramChannelResponse = zod.object({
   "last_message_id": zod.number(),
   "messages_processed": zod.number(),
   "created_at": zod.coerce.date(),
-  "last_activity_at": zod.coerce.date().nullish()
+  "last_activity_at": zod.coerce.date().nullish(),
+  "listener_status": zod.union([zod.object({
+  "joined": zod.boolean(),
+  "error": zod.string().nullish(),
+  "polled_at": zod.coerce.date().nullish()
+}),zod.null()]).optional()
+})
+
+
+/**
+ * @summary Manually fetch the latest 10 messages from a channel
+ */
+export const TestFetchTelegramChannelParams = zod.object({
+  "channelId": zod.coerce.number()
+})
+
+export const TestFetchTelegramChannelResponse = zod.object({
+  "fetched": zod.number(),
+  "channel": zod.string()
 })
 
 
@@ -428,7 +456,12 @@ export const UpdateTelegramChannelResponse = zod.object({
   "last_message_id": zod.number(),
   "messages_processed": zod.number(),
   "created_at": zod.coerce.date(),
-  "last_activity_at": zod.coerce.date().nullish()
+  "last_activity_at": zod.coerce.date().nullish(),
+  "listener_status": zod.union([zod.object({
+  "joined": zod.boolean(),
+  "error": zod.string().nullish(),
+  "polled_at": zod.coerce.date().nullish()
+}),zod.null()]).optional()
 })
 
 

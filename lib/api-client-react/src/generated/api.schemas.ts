@@ -162,6 +162,8 @@ export interface TelegramAuthStatus {
   monitoring: boolean;
   channels_active: number;
   messages_processed: number;
+  messages_rejected?: number;
+  raw_updates_received?: number;
   /** @nullable */
   last_message_at?: string | null;
   /** @nullable */
@@ -191,6 +193,14 @@ export interface TelegramChannelUpdate {
   is_approved?: boolean;
 }
 
+export interface ListenerStatus {
+  joined: boolean;
+  /** @nullable */
+  error?: string | null;
+  /** @nullable */
+  polled_at?: string | null;
+}
+
 export interface TelegramChannelResponse {
   id: number;
   username: string;
@@ -208,6 +218,7 @@ export interface TelegramChannelResponse {
   created_at: string;
   /** @nullable */
   last_activity_at?: string | null;
+  listener_status?: ListenerStatus | null;
 }
 
 export type ListEventsParams = {
@@ -247,5 +258,10 @@ export type TelegramVerifyCode200 = {
 
 export type TelegramLogout200 = {
   message: string;
+};
+
+export type TestFetchTelegramChannel200 = {
+  fetched: number;
+  channel: string;
 };
 

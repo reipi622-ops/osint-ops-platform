@@ -39,7 +39,8 @@ import type {
   TelegramLogout200,
   TelegramRequestCode200,
   TelegramVerifyCode200,
-  TelegramVerifyRequest
+  TelegramVerifyRequest,
+  TestFetchTelegramChannel200
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1525,6 +1526,76 @@ export const useApproveTelegramChannel = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getApproveTelegramChannelMutationOptions(options));
+    }
+
+export const getTestFetchTelegramChannelUrl = (channelId: number,) => {
+
+
+
+
+  return `/api/telegram/channels/${channelId}/test-fetch`
+}
+
+/**
+ * @summary Manually fetch the latest 10 messages from a channel
+ */
+export const testFetchTelegramChannel = async (channelId: number, options?: RequestInit): Promise<TestFetchTelegramChannel200> => {
+
+  return customFetch<TestFetchTelegramChannel200>(getTestFetchTelegramChannelUrl(channelId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTestFetchTelegramChannelMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testFetchTelegramChannel>>, TError,{channelId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testFetchTelegramChannel>>, TError,{channelId: number}, TContext> => {
+
+const mutationKey = ['testFetchTelegramChannel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testFetchTelegramChannel>>, {channelId: number}> = (props) => {
+          const {channelId} = props ?? {};
+
+          return  testFetchTelegramChannel(channelId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestFetchTelegramChannelMutationResult = NonNullable<Awaited<ReturnType<typeof testFetchTelegramChannel>>>
+
+    export type TestFetchTelegramChannelMutationError = ErrorType<void>
+
+    /**
+ * @summary Manually fetch the latest 10 messages from a channel
+ */
+export const useTestFetchTelegramChannel = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testFetchTelegramChannel>>, TError,{channelId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testFetchTelegramChannel>>,
+        TError,
+        {channelId: number},
+        TContext
+      > => {
+      return useMutation(getTestFetchTelegramChannelMutationOptions(options));
     }
 
 export const getUpdateTelegramChannelUrl = (channelId: number,) => {

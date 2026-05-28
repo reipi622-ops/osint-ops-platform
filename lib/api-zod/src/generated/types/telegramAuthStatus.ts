@@ -15,6 +15,8 @@ export interface TelegramAuthStatus {
   monitoring: boolean;
   channels_active: number;
   messages_processed: number;
+  messages_rejected?: number;
+  raw_updates_received?: number;
   /** @nullable */
   last_message_at?: Date | null;
   /** @nullable */
