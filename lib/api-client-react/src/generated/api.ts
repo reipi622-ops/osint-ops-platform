@@ -30,6 +30,7 @@ import type {
   GeoClusterListResponse,
   GetEventsTimelineParams,
   HealthStatus,
+  HotZoneListResponse,
   ListAlertsParams,
   ListEventsParams,
   PatternListResponse,
@@ -1375,9 +1376,9 @@ export const getListGeoHotzonesUrl = () => {
 /**
  * @summary List hot zones — clusters with ≥4 events in the past 24 hours
  */
-export const listGeoHotzones = async ( options?: RequestInit): Promise<GeoClusterListResponse> => {
+export const listGeoHotzones = async ( options?: RequestInit): Promise<HotZoneListResponse> => {
 
-  return customFetch<GeoClusterListResponse>(getListGeoHotzonesUrl(),
+  return customFetch<HotZoneListResponse>(getListGeoHotzonesUrl(),
   {
     ...options,
     method: 'GET'

@@ -313,6 +313,43 @@ export interface PatternListResponse {
   total: number;
 }
 
+export type HotZoneDominantSide = typeof HotZoneDominantSide[keyof typeof HotZoneDominantSide];
+
+
+export const HotZoneDominantSide = {
+  red: 'red',
+  blue: 'blue',
+  neutral: 'neutral',
+} as const;
+
+export type HotZoneThreatLevel = typeof HotZoneThreatLevel[keyof typeof HotZoneThreatLevel];
+
+
+export const HotZoneThreatLevel = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
+export interface HotZone {
+  center_lat: number;
+  center_lng: number;
+  radius_km: number;
+  event_count: number;
+  dominant_side: HotZoneDominantSide;
+  /** @nullable */
+  last_event_at?: string | null;
+  threat_level: HotZoneThreatLevel;
+  event_ids: number[];
+}
+
+export interface HotZoneListResponse {
+  clusters: HotZone[];
+  total: number;
+  hotzones: number;
+}
+
 export type GeoClusterDominantSide = typeof GeoClusterDominantSide[keyof typeof GeoClusterDominantSide];
 
 

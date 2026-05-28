@@ -570,8 +570,6 @@ export const ListGeoClustersResponse = zod.object({
  */
 export const ListGeoHotzonesResponse = zod.object({
   "clusters": zod.array(zod.object({
-  "grid_lat": zod.number(),
-  "grid_lng": zod.number(),
   "center_lat": zod.number(),
   "center_lng": zod.number(),
   "radius_km": zod.number(),
@@ -579,8 +577,7 @@ export const ListGeoHotzonesResponse = zod.object({
   "dominant_side": zod.enum(['red', 'blue', 'neutral']),
   "last_event_at": zod.string().nullish(),
   "threat_level": zod.enum(['low', 'medium', 'high', 'critical']),
-  "event_ids": zod.array(zod.number()),
-  "is_hotzone": zod.boolean()
+  "event_ids": zod.array(zod.number())
 })),
   "total": zod.number(),
   "hotzones": zod.number()

@@ -388,7 +388,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GeoClusterListResponse"
+                $ref: "#/components/schemas/HotZoneListResponse"
 
   /scraper/status:
     get:
@@ -925,6 +925,32 @@ components:
             $ref: "#/components/schemas/PatternAlert"
         total: { type: integer }
       required: [patterns, total]
+
+    HotZone:
+      type: object
+      properties:
+        center_lat: { type: number }
+        center_lng: { type: number }
+        radius_km: { type: number }
+        event_count: { type: integer }
+        dominant_side: { type: string, enum: [red, blue, neutral] }
+        last_event_at: { type: ["string", "null"] }
+        threat_level: { type: string, enum: [low, medium, high, critical] }
+        event_ids:
+          type: array
+          items: { type: integer }
+      required: [center_lat, center_lng, radius_km, event_count, dominant_side, threat_level, event_ids]
+
+    HotZoneListResponse:
+      type: object
+      properties:
+        clusters:
+          type: array
+          items:
+            $ref: "#/components/schemas/HotZone"
+        total: { type: integer }
+        hotzones: { type: integer }
+      required: [clusters, total, hotzones]
 
     GeoCluster:
       type: object
