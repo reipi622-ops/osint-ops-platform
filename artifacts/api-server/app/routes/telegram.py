@@ -2,9 +2,11 @@
 Telegram admin routes:
   Auth:     GET/POST /telegram/auth/status|request-code|verify-code|logout
   Channels: GET/POST/PATCH/DELETE /telegram/channels[/{id}]
-  SSE:      GET /events/stream   (lives in events router for cleaner path)
+            POST /telegram/channels/{id}/approve
 """
 import logging
+import re
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -13,6 +15,12 @@ from app.services import telegram_monitor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/telegram", tags=["telegram"])
+
+_USERNAME_RE = re.compile(r"^https?://t\.me/", re.I)
+
+
+def _clean_username(raw: str) -> str:
+    return _USERNAME_RE.sub("", raw.strip()).lstrip("@").lower()
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -68,30 +76,128 @@ async def logout():
 
 @router.get("/channels", response_model=list[schemas.TelegramChannelResponse])
 async def list_channels(db: Session = Depends(get_db)):
-    return db.query(models.TelegramChannel).order_by(models.TelegramChannel.created_at.desc()).all()
+    return (
+        db.query(models.TelegramChannel)
+        .order_by(models.TelegramChannel.created_at.desc())
+        .all()
+    )
 
 
 @router.post("/channels", response_model=schemas.TelegramChannelResponse, status_code=201)
 async def add_channel(body: schemas.TelegramChannelInput, db: Session = Depends(get_db)):
-    import re
-    username = re.sub(r"^https?://t\.me/", "", body.username.strip()).lstrip("@")
+    username = _clean_username(body.username)
+    if not username:
+        raise HTTPException(status_code=422, detail="Invalid channel username")
+
     existing = db.query(models.TelegramChannel).filter(
         models.TelegramChannel.username.ilike(username)
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Channel @{username} already exists")
 
+    # Verify this is a real, public broadcast channel via Telethon
+    is_public_verified = False
+    resolved_title = body.title or f"@{username}"
+    channel_tg_id = None
+
+    status = telegram_monitor.get_status()
+    if status["authorized"]:
+        try:
+            entity_info = await telegram_monitor.verify_public_channel(username)
+            if entity_info is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"@{username} is not a public broadcast channel. "
+                        "Only public Telegram channels (not groups, not private chats) "
+                        "may be added."
+                    ),
+                )
+            is_public_verified = True
+            resolved_title = entity_info.get("title") or resolved_title
+            channel_tg_id = entity_info.get("id")
+            logger.info(
+                "Security: verified @%s is a public broadcast channel (id=%s)",
+                username, channel_tg_id,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Could not verify @{username}: {exc}"
+            )
+    else:
+        logger.warning(
+            "Security: adding @%s without verification (Telegram not authorized)", username
+        )
+
     ch = models.TelegramChannel(
         username=username,
-        title=body.title or f"@{username}",
-        is_active=body.is_active,
+        title=resolved_title,
+        channel_id=channel_tg_id,
+        is_active=False,        # must be explicitly activated after approval
+        is_approved=False,      # requires manual approval before monitoring starts
+        is_public_verified=is_public_verified,
     )
     db.add(ch)
     db.commit()
     db.refresh(ch)
 
+    logger.info(
+        "Security audit: channel @%s added — pending approval (verified_public=%s)",
+        username, is_public_verified,
+    )
+    return ch
+
+
+@router.post("/channels/{channel_id}/approve", response_model=schemas.TelegramChannelResponse)
+async def approve_channel(channel_id: int, db: Session = Depends(get_db)):
+    """
+    Explicitly approve a channel for monitoring.
+    Only approved + active channels receive messages.
+    This action is logged for audit purposes.
+    """
+    ch = db.query(models.TelegramChannel).filter(
+        models.TelegramChannel.id == channel_id
+    ).first()
+    if not ch:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    if not ch.is_public_verified:
+        status = telegram_monitor.get_status()
+        if status["authorized"]:
+            try:
+                entity_info = await telegram_monitor.verify_public_channel(ch.username)
+                if entity_info is None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            f"@{ch.username} failed public-channel verification. "
+                            "Cannot approve a non-public or non-broadcast source."
+                        ),
+                    )
+                ch.is_public_verified = True
+                if entity_info.get("id"):
+                    ch.channel_id = entity_info["id"]
+                if entity_info.get("title"):
+                    ch.title = entity_info["title"]
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(status_code=422, detail=f"Verification failed: {exc}")
+
+    ch.is_approved = True
+    ch.approved_at = datetime.utcnow()
+    ch.is_active = True
+    db.commit()
+    db.refresh(ch)
+
     await telegram_monitor.refresh_active_channels()
-    logger.info("Channel added: @%s", username)
+    logger.info(
+        "Security audit: channel @%s APPROVED for monitoring at %s",
+        ch.username, ch.approved_at.isoformat(),
+    )
     return ch
 
 
@@ -101,22 +207,41 @@ async def update_channel(
     body: schemas.TelegramChannelUpdate,
     db: Session = Depends(get_db),
 ):
-    ch = db.query(models.TelegramChannel).filter(models.TelegramChannel.id == channel_id).first()
+    ch = db.query(models.TelegramChannel).filter(
+        models.TelegramChannel.id == channel_id
+    ).first()
     if not ch:
         raise HTTPException(status_code=404, detail="Channel not found")
-    for k, v in body.model_dump(exclude_none=True).items():
+
+    updates = body.model_dump(exclude_none=True)
+
+    # Prevent activating an unapproved channel via PATCH
+    if updates.get("is_active") is True and not ch.is_approved:
+        raise HTTPException(
+            status_code=422,
+            detail="Channel must be approved before it can be activated. Use POST /approve first.",
+        )
+
+    for k, v in updates.items():
         setattr(ch, k, v)
+
     db.commit()
     db.refresh(ch)
     await telegram_monitor.refresh_active_channels()
+    logger.info("Security audit: channel @%s updated: %s", ch.username, list(updates.keys()))
     return ch
 
 
 @router.delete("/channels/{channel_id}", status_code=204)
 async def delete_channel(channel_id: int, db: Session = Depends(get_db)):
-    ch = db.query(models.TelegramChannel).filter(models.TelegramChannel.id == channel_id).first()
+    ch = db.query(models.TelegramChannel).filter(
+        models.TelegramChannel.id == channel_id
+    ).first()
     if not ch:
         raise HTTPException(status_code=404, detail="Channel not found")
+    logger.info(
+        "Security audit: channel @%s REMOVED from monitoring whitelist", ch.username
+    )
     db.delete(ch)
     db.commit()
     await telegram_monitor.refresh_active_channels()

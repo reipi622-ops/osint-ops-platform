@@ -2,6 +2,15 @@
 Telegram channel monitor using Telethon.
 Runs inside FastAPI's asyncio event loop — init_client() is awaited in lifespan.
 
+Security policy (enforced in code):
+  - WHITELIST ONLY: messages are processed only from manually added, admin-approved channels.
+  - PUBLIC BROADCAST ONLY: only telethon.tl.types.Channel with broadcast=True and a public
+    username are ever accepted. Private chats, groups, supergroups and user DMs are rejected
+    at the handler level and logged.
+  - NO CONTACT ACCESS: get_contacts() / get_dialogs() are never called.
+  - NO PRIVATE DIALOGS: private message events are silently dropped.
+  - AUDIT LOGGING: every accepted and every rejected message is logged with its source type.
+
 Auth flow:
   1. POST /api/telegram/auth/request-code  → request_code(phone)
   2. POST /api/telegram/auth/verify-code   → verify_code(phone, code, [password])
@@ -19,7 +28,7 @@ logger = logging.getLogger(__name__)
 _client = None          # TelegramClient instance (lazy import)
 _pending_phone_hash: Optional[str] = None
 _handler_registered = False
-_active_usernames: set[str] = set()  # cached; refreshed on channel changes
+_active_usernames: set[str] = set()  # only approved+active channels; refreshed on changes
 
 _status: dict = {
     "configured": False,
@@ -29,6 +38,7 @@ _status: dict = {
     "monitoring": False,
     "channels_active": 0,
     "messages_processed": 0,
+    "messages_rejected": 0,
     "last_message_at": None,
     "error": None,
 }
@@ -47,6 +57,25 @@ def _normalize_username(raw: str) -> str:
 
 def _is_arabic(text: str) -> bool:
     return any("\u0600" <= c <= "\u06FF" for c in text)
+
+
+def _is_public_broadcast(chat) -> bool:
+    """
+    Return True only if the chat entity is a public Telegram broadcast channel.
+    Rejects: private chats (User), groups (Chat), supergroups, private channels.
+    """
+    try:
+        from telethon.tl.types import Channel
+    except ImportError:
+        return False
+
+    if not isinstance(chat, Channel):
+        return False
+    if not getattr(chat, "broadcast", False):
+        return False
+    if not getattr(chat, "username", None):
+        return False
+    return True
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -122,15 +151,11 @@ async def verify_code(phone: str, code: str, password: Optional[str] = None) -> 
         raise RuntimeError("Telegram client is not connected.")
 
     try:
-        from telethon.errors import SessionPasswordNeededError
         kwargs = {}
         if _pending_phone_hash:
             kwargs["phone_code_hash"] = _pending_phone_hash
-
         await _client.sign_in(phone=phone, code=code, **kwargs)
-
     except Exception as exc:
-        # Check for 2FA requirement without importing the class
         if "SessionPasswordNeededError" in type(exc).__name__ or "password" in str(exc).lower():
             if not password:
                 raise ValueError("Two-factor authentication is enabled. Provide your 2FA password.")
@@ -161,8 +186,39 @@ async def logout() -> None:
     logger.info("Telegram: logged out")
 
 
+async def verify_public_channel(username: str) -> Optional[dict]:
+    """
+    Resolve a username via Telethon and confirm it is a public broadcast channel.
+    Returns {"id": int, "title": str} if valid, or None if not a public channel.
+    Never accesses private chats, contacts or dialogs.
+    """
+    if not _client or not _client.is_connected():
+        raise RuntimeError("Telegram client is not connected.")
+
+    try:
+        entity = await _client.get_entity(username)
+    except Exception as exc:
+        logger.warning("Telegram: could not resolve @%s: %s", username, exc)
+        raise RuntimeError(f"Could not resolve @{username}: {exc}")
+
+    if not _is_public_broadcast(entity):
+        logger.warning(
+            "Security: @%s rejected — not a public broadcast channel (type=%s broadcast=%s username=%s)",
+            username,
+            type(entity).__name__,
+            getattr(entity, "broadcast", None),
+            getattr(entity, "username", None),
+        )
+        return None
+
+    return {
+        "id": entity.id,
+        "title": getattr(entity, "title", f"@{username}"),
+    }
+
+
 async def refresh_active_channels() -> None:
-    """Reload monitored usernames from DB into the in-memory cache."""
+    """Reload approved+active channel usernames from DB into the in-memory whitelist."""
     global _active_usernames
 
     def _load():
@@ -172,7 +228,10 @@ async def refresh_active_channels() -> None:
         try:
             rows = (
                 db.query(models.TelegramChannel)
-                .filter(models.TelegramChannel.is_active == True)
+                .filter(
+                    models.TelegramChannel.is_active == True,
+                    models.TelegramChannel.is_approved == True,
+                )
                 .all()
             )
             return {_normalize_username(r.username) for r in rows}, len(rows)
@@ -182,7 +241,10 @@ async def refresh_active_channels() -> None:
     names, count = await asyncio.to_thread(_load)
     _active_usernames = names
     _status["channels_active"] = count
-    logger.debug("Telegram: active channels refreshed (%d)", count)
+    logger.info(
+        "Security: whitelist refreshed — %d approved+active channel(s): %s",
+        count, sorted(names),
+    )
 
 
 # ── monitoring ────────────────────────────────────────────────────────────────
@@ -197,40 +259,68 @@ async def _start_monitoring() -> None:
         from telethon import events as tg_events
         _client.add_event_handler(_handle_message, tg_events.NewMessage)
         _handler_registered = True
+        logger.info("Security: message handler registered (whitelist-only mode)")
 
     await refresh_active_channels()
     _status["monitoring"] = True
-    logger.info("Telegram: monitoring started (%d channels)", _status["channels_active"])
+    logger.info("Telegram: monitoring started (%d approved channels)", _status["channels_active"])
 
 
 async def _handle_message(event) -> None:
-    """Called by Telethon for every new message received by the account."""
+    """
+    Called by Telethon for every new message the account receives.
+
+    Security gates (all must pass):
+      1. Chat must be a public broadcast Channel (not a group, not a private chat, not a user DM)
+      2. Chat must have a public username
+      3. Username must be in the admin-approved whitelist
+    Messages failing any gate are dropped and counted.
+    """
     global _active_usernames
 
     try:
-        # Determine the chat's username so we can match it
         chat = await event.get_chat()
         chat_username = getattr(chat, "username", None) or ""
         chat_id = getattr(chat, "id", None)
+        chat_type = type(chat).__name__
 
-        # Must be from a monitored channel
+        # ── Gate 1: must be a public broadcast channel ──────────────────────
+        if not _is_public_broadcast(chat):
+            _status["messages_rejected"] += 1
+            logger.debug(
+                "Security: dropped message — not a public broadcast channel "
+                "(type=%s, username=%s, broadcast=%s)",
+                chat_type,
+                chat_username or "<none>",
+                getattr(chat, "broadcast", None),
+            )
+            return
+
+        # ── Gate 2: must be in the approved whitelist ────────────────────────
         if not _active_usernames:
+            _status["messages_rejected"] += 1
             return
 
-        is_monitored = (
-            _normalize_username(chat_username) in _active_usernames
-            if chat_username
-            else False
-        )
-        if not is_monitored:
+        normalized = _normalize_username(chat_username)
+        if normalized not in _active_usernames:
+            _status["messages_rejected"] += 1
+            logger.debug(
+                "Security: dropped message from @%s — not in approved whitelist", chat_username
+            )
             return
 
+        # ── Passed all gates ─────────────────────────────────────────────────
         text = event.message.message or ""
         if not text.strip():
             return
 
-        logger.info("Telegram: new message from @%s (%d chars)", chat_username, len(text))
-        await asyncio.to_thread(_process_message_sync, text, chat_username, chat_id, event.message.id)
+        logger.info(
+            "Security: accepted message from approved public channel @%s (%d chars)",
+            chat_username, len(text),
+        )
+        await asyncio.to_thread(
+            _process_message_sync, text, chat_username, chat_id, event.message.id
+        )
 
     except Exception as exc:
         logger.error("Telegram message handler error: %s", exc)
@@ -327,7 +417,7 @@ def _process_message_sync(
         _status["messages_processed"] += 1
         _status["last_message_at"] = now
 
-        # Broadcast to SSE clients (schedule coroutine from sync thread)
+        # Broadcast to SSE clients
         from pydantic import TypeAdapter
         from app.schemas import EventResponse
         payload = TypeAdapter(EventResponse).validate_python(ev).model_dump(mode="json")

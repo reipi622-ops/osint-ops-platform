@@ -139,6 +139,7 @@ class TelegramChannelInput(BaseModel):
 class TelegramChannelUpdate(BaseModel):
     title: Optional[str] = None
     is_active: Optional[bool] = None
+    is_approved: Optional[bool] = None
 
 
 class TelegramChannelResponse(BaseModel):
@@ -148,6 +149,9 @@ class TelegramChannelResponse(BaseModel):
     title: Optional[str] = None
     channel_id: Optional[int] = None
     is_active: bool
+    is_approved: bool
+    approved_at: Optional[datetime] = None
+    is_public_verified: bool
     last_message_id: int
     messages_processed: int
     created_at: datetime

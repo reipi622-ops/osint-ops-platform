@@ -368,6 +368,28 @@ paths:
         "409":
           description: Channel already exists
 
+  /telegram/channels/{channelId}/approve:
+    post:
+      operationId: approveTelegramChannel
+      tags: [telegram]
+      summary: Approve a channel for monitoring (whitelist it)
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Channel approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramChannelResponse"
+        "404":
+          description: Not found
+        "422":
+          description: Not a public broadcast channel
+
   /telegram/channels/{channelId}:
     patch:
       operationId: updateTelegramChannel
@@ -612,6 +634,7 @@ components:
       properties:
         title: { type: string }
         is_active: { type: boolean }
+        is_approved: { type: boolean }
 
     TelegramChannelResponse:
       type: object
@@ -621,8 +644,11 @@ components:
         title: { type: ["string", "null"] }
         channel_id: { type: ["integer", "null"] }
         is_active: { type: boolean }
+        is_approved: { type: boolean }
+        approved_at: { type: ["string", "null"], format: date-time }
+        is_public_verified: { type: boolean }
         last_message_id: { type: integer }
         messages_processed: { type: integer }
         created_at: { type: string, format: date-time }
         last_activity_at: { type: ["string", "null"], format: date-time }
-      required: [id, username, is_active, last_message_id, messages_processed, created_at]
+      required: [id, username, is_active, is_approved, is_public_verified, last_message_id, messages_processed, created_at]

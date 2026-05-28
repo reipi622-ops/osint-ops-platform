@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text as sa_text
 from app.database import engine
 from app import models
 from app.routes import health, events, sources, scraper as scraper_router
@@ -15,9 +16,32 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger(__name__)
 
 
+def _migrate_db() -> None:
+    """Add new columns to existing tables without dropping data (SQLite-safe)."""
+    migrations = [
+        "ALTER TABLE telegram_channels ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE telegram_channels ADD COLUMN approved_at DATETIME",
+        "ALTER TABLE telegram_channels ADD COLUMN is_public_verified INTEGER NOT NULL DEFAULT 0",
+    ]
+    with engine.connect() as conn:
+        existing = {
+            row[1]
+            for row in conn.execute(
+                sa_text("PRAGMA table_info(telegram_channels)")
+            )
+        }
+        for stmt in migrations:
+            col = stmt.split("ADD COLUMN")[1].strip().split()[0]
+            if col not in existing:
+                conn.execute(sa_text(stmt))
+                conn.commit()
+                logger.info("DB migration: added column %s", col)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
+    _migrate_db()
     initialize_default_sources()
     seed_sample_events()
 

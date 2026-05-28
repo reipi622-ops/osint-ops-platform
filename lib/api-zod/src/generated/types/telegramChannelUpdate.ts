@@ -9,4 +9,5 @@
 export interface TelegramChannelUpdate {
   title?: string;
   is_active?: boolean;
+  is_approved?: boolean;
 }

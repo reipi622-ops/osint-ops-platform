@@ -178,6 +178,7 @@ export interface TelegramChannelInput {
 export interface TelegramChannelUpdate {
   title?: string;
   is_active?: boolean;
+  is_approved?: boolean;
 }
 
 export interface TelegramChannelResponse {
@@ -188,6 +189,10 @@ export interface TelegramChannelResponse {
   /** @nullable */
   channel_id?: number | null;
   is_active: boolean;
+  is_approved: boolean;
+  /** @nullable */
+  approved_at?: string | null;
+  is_public_verified: boolean;
   last_message_id: number;
   messages_processed: number;
   created_at: string;

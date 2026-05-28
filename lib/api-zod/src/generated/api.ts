@@ -345,6 +345,9 @@ export const ListTelegramChannelsResponseItem = zod.object({
   "title": zod.string().nullish(),
   "channel_id": zod.number().nullish(),
   "is_active": zod.boolean(),
+  "is_approved": zod.boolean(),
+  "approved_at": zod.coerce.date().nullish(),
+  "is_public_verified": zod.boolean(),
   "last_message_id": zod.number(),
   "messages_processed": zod.number(),
   "created_at": zod.coerce.date(),
@@ -366,6 +369,29 @@ export const AddTelegramChannelBody = zod.object({
 
 
 /**
+ * @summary Approve a channel for monitoring (whitelist it)
+ */
+export const ApproveTelegramChannelParams = zod.object({
+  "channelId": zod.coerce.number()
+})
+
+export const ApproveTelegramChannelResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "title": zod.string().nullish(),
+  "channel_id": zod.number().nullish(),
+  "is_active": zod.boolean(),
+  "is_approved": zod.boolean(),
+  "approved_at": zod.coerce.date().nullish(),
+  "is_public_verified": zod.boolean(),
+  "last_message_id": zod.number(),
+  "messages_processed": zod.number(),
+  "created_at": zod.coerce.date(),
+  "last_activity_at": zod.coerce.date().nullish()
+})
+
+
+/**
  * @summary Update a Telegram channel (toggle active, rename)
  */
 export const UpdateTelegramChannelParams = zod.object({
@@ -374,7 +400,8 @@ export const UpdateTelegramChannelParams = zod.object({
 
 export const UpdateTelegramChannelBody = zod.object({
   "title": zod.string().optional(),
-  "is_active": zod.boolean().optional()
+  "is_active": zod.boolean().optional(),
+  "is_approved": zod.boolean().optional()
 })
 
 export const UpdateTelegramChannelResponse = zod.object({
@@ -383,6 +410,9 @@ export const UpdateTelegramChannelResponse = zod.object({
   "title": zod.string().nullish(),
   "channel_id": zod.number().nullish(),
   "is_active": zod.boolean(),
+  "is_approved": zod.boolean(),
+  "approved_at": zod.coerce.date().nullish(),
+  "is_public_verified": zod.boolean(),
   "last_message_id": zod.number(),
   "messages_processed": zod.number(),
   "created_at": zod.coerce.date(),

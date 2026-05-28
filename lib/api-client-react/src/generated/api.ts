@@ -1457,6 +1457,76 @@ export const useAddTelegramChannel = <TError = ErrorType<void>,
       return useMutation(getAddTelegramChannelMutationOptions(options));
     }
 
+export const getApproveTelegramChannelUrl = (channelId: number,) => {
+
+
+
+
+  return `/api/telegram/channels/${channelId}/approve`
+}
+
+/**
+ * @summary Approve a channel for monitoring (whitelist it)
+ */
+export const approveTelegramChannel = async (channelId: number, options?: RequestInit): Promise<TelegramChannelResponse> => {
+
+  return customFetch<TelegramChannelResponse>(getApproveTelegramChannelUrl(channelId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getApproveTelegramChannelMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveTelegramChannel>>, TError,{channelId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveTelegramChannel>>, TError,{channelId: number}, TContext> => {
+
+const mutationKey = ['approveTelegramChannel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveTelegramChannel>>, {channelId: number}> = (props) => {
+          const {channelId} = props ?? {};
+
+          return  approveTelegramChannel(channelId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveTelegramChannelMutationResult = NonNullable<Awaited<ReturnType<typeof approveTelegramChannel>>>
+
+    export type ApproveTelegramChannelMutationError = ErrorType<void>
+
+    /**
+ * @summary Approve a channel for monitoring (whitelist it)
+ */
+export const useApproveTelegramChannel = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveTelegramChannel>>, TError,{channelId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveTelegramChannel>>,
+        TError,
+        {channelId: number},
+        TContext
+      > => {
+      return useMutation(getApproveTelegramChannelMutationOptions(options));
+    }
+
 export const getUpdateTelegramChannelUrl = (channelId: number,) => {
 
 
