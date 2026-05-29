@@ -207,20 +207,11 @@ export function EventDrawer({ event, onClose }: EventDrawerProps) {
                   <p className="text-[9px] text-muted-foreground uppercase tracking-widest">
                     SOURCE
                   </p>
-                  {event.source_url ? (
-                    <a
-                      href={event.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline truncate block"
-                    >
-                      {event.source_name || event.source_url}
-                    </a>
-                  ) : (
-                    <p className="text-foreground truncate">
-                      {event.source_name || "—"}
-                    </p>
-                  )}
+                  <p className="text-sm font-semibold truncate">
+                    {event.source_name
+                      ? event.source_name.replace(/^Telegram:\s*/i, "").replace(/^@/, "")
+                      : "לא ידוע"}
+                  </p>
                 </div>
               </div>
 
