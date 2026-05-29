@@ -367,9 +367,9 @@ async def fetch_latest_messages(username: str, limit: int = 10) -> dict:
 
 
 async def _poll_loop() -> None:
-    logger.info("Telegram: polling fallback loop started (30 s interval)")
+    logger.info("Telegram: polling fallback loop started (10 s interval)")
     while True:
-        await asyncio.sleep(30)
+        await asyncio.sleep(10)
         if not _active_usernames:
             continue
         for username in list(_active_usernames):
