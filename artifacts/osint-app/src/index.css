@@ -387,3 +387,20 @@
     box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
   }
 }
+
+/* ── Newsroom Typography ──────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Assistant:wght@400;600;700&display=swap');
+
+/* RTL Hebrew readability */
+[dir="rtl"], .rtl, h1, h2, h3, p {
+  line-height: 1.75;
+}
+
+/* Newsroom event card border */
+.news-card {
+  border-right: 3px solid currentColor;
+  transition: background 0.15s;
+}
+.news-card:hover {
+  background: rgba(255,255,255,0.03);
+}
